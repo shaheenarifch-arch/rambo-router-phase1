@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BLACK™ | Premium Agentic Intelligence</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+<style>
+
+:root{
+  --gold:#FFD700;
+  --gold2:#ffb800;
+  --black:#050505;
+  --card:#0d0d0d;
+}
+
+*{
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+}
+
+body{
+  background:#000;
+  color:#fff;
+  font-family:'Space Grotesk',sans-serif;
+  overflow-x:hidden;
+}
+
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  background:
+  radial-gradient(circle at 20% 20%,rgba(255,215,0,.18),transparent 25%),
+  radial-gradient(circle at 80% 30%,rgba(255,215,0,.12),transparent 20%),
+  radial-gradient(circle at 50% 80%,rgba(255,215,0,.10),transparent 30%);
+  z-index:-2;
+}
+
+body::after{
+  content:"";
+  position:fixed;
+  inset:0;
+  background:
+  linear-gradient(
+  rgba(255,255,255,.01),
+  rgba(255,255,255,.005)
+  );
+  backdrop-filter:blur(120px);
+  z-index:-1;
+}
+
+nav{
+  position:fixed;
+  width:100%;
+  top:0;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:25px 60px;
+  backdrop-filter:blur(16px);
+  border-bottom:1px solid rgba(255,255,255,.08);
+  z-index:999;
+}
+
+.logo{
+  font-size:34px;
+  font-weight:700;
+  letter-spacing:8px;
+  color:var(--gold);
+}
+
+.menu{
+  display:flex;
+  gap:30px;
+}
+
+.menu a{
+  color:#fff;
+  text-decoration:none;
+  opacity:.8;
+}
+
+.menu a:hover{
+  color:var(--gold);
+}
+
+.hero{
+  min-height:100vh;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  text-align:center;
+  padding:120px 30px;
+}
+
+.hero-content{
+  max-width:1200px;
+}
+
+.badge{
+  display:inline-flex;
+  padding:10px 22px;
+  border-radius:999px;
+  border:1px solid rgba(255,215,0,.3);
+  background:rgba(255,215,0,.08);
+  color:var(--gold);
+  margin-bottom:30px;
+}
+
+.hero h1{
+  font-size:130px;
+  line-height:1;
+  letter-spacing:-5px;
+  margin-bottom:20px;
+
+  background:
+  linear-gradient(
+  180deg,
+  #ffffff,
+  #FFD700,
+  #ffffff
+  );
+
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+}
+
+.hero p{
+  max-width:900px;
+  margin:auto;
+  font-size:24px;
+  color:#d0d0d0;
+}
+
+.buttons{
+  margin-top:50px;
+  display:flex;
+  justify-content:center;
+  gap:18px;
+  flex-wrap:wrap;
+}
+
+.btn{
+  padding:18px 34px;
+  border-radius:16px;
+  border:none;
+  font-size:18px;
+  cursor:pointer;
+  transition:.35s;
+}
+
+.btn:hover{
+  transform:translateY(-5px);
+}
+
+.primary{
+  background:
+  linear-gradient(
+  90deg,
+  #FFD700,
+  #ffb800
+  );
+
+  color:#000;
+  font-weight:700;
+}
+
+.secondary{
+  background:rgba(255,255,255,.05);
+  color:#fff;
+  border:1px solid rgba(255,255,255,.10);
+}
+
+.section{
+  padding:120px 8%;
+}
+
+.section-title{
+  text-align:center;
+  font-size:62px;
+  margin-bottom:20px;
+}
+
+.section-description{
+  text-align:center;
+  color:#aaa;
+  max-width:850px;
+  margin:0 auto 70px;
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+  gap:25px;
+}
+
+.card{
+  background:rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:26px;
+  padding:35px;
+  transition:.4s;
+}
+
+.card:hover{
+  transform:translateY(-10px);
+  border-color:rgba(255,215,0,.4);
+}
+
+.card h3{
+  color:var(--gold);
+  margin-bottom:12px;
+  font-size:28px;
+}
+
+.routing-box{
+  max-width:1200px;
+  margin:auto;
+  background:
+  linear-gradient(
+  135deg,
+  rgba(255,215,0,.12),
+  rgba(255,255,255,.02)
+  );
+
+  border-radius:30px;
+  border:1px solid rgba(255,215,0,.15);
+  padding:70px;
+  text-align:center;
+}
+
+.routing-box h2{
+  font-size:52px;
+  margin-bottom:16px;
+}
+
+.flow{
+  margin-top:50px;
+  display:flex;
+  justify-content:center;
+  gap:15px;
+  flex-wrap:wrap;
+}
+
+.node{
+  padding:18px 24px;
+  border-radius:14px;
+  border:1px solid rgba(255,215,0,.25);
+  background:#050505;
+}
+
+.arrow{
+  color:var(--gold);
+  font-size:32px;
+}
+
+.launch{
+  text-align:center;
+}
+
+.launch h2{
+  font-size:90px;
+  margin-bottom:20px;
+}
+
+.launch p{
+  max-width:900px;
+  margin:auto;
+  color:#ccc;
+  font-size:23px;
+}
+
+footer{
+  padding:40px;
+  text-align:center;
+  border-top:1px solid rgba(255,255,255,.08);
+  color:#666;
+}
+
+@media(max-width:768px){
+
+.hero h1{
+  font-size:72px;
+}
+
+.section-title{
+  font-size:42px;
+}
+
+.launch h2{
+  font-size:54px;
+}
+
+nav{
+  padding:20px;
+}
+
+.menu{
+  display:none;
+}
+}
+
+</style>
+</head>
+
+<body>
+
+<nav>
+
+<div class="logo">BLACK</div>
+
+<div class="menu">
+<a href="#">Platform</a>
+<a href="#">Intelligence</a>
+<a href="#">Enterprise</a>
+<a href="#">Contact</a>
+</div>
+
+</nav>
+
+<section class="hero">
+
+<div class="hero-content">
+
+<div class="badge">
+PREMIUM AGENTIC INTELLIGENCE
+</div>
+
+<h1>BLACK™</h1>
+
+<p>
+The Executive AI Platform That Thinks, Routes and Executes.
+Access intelligent auto-routing across GPT, Claude, Gemini and Grok without ever switching models.
+</p>
+
+<div class="buttons">
+<button class="btn primary">
+Unlock BLACK
+</button>
+
+<button class="btn secondary">
+See How It Works
+</button>
+</div>
+
+</div>
+
+</section>
+
+<section class="section">
+
+<h2 class="section-title">
+Intelligent Auto-Routing
+</h2>
+
+<p class="section-description">
+BLACK automatically selects the most capable AI model for every task. No model switching. No prompt engineering. No guesswork.
+</p>
+
+<div class="grid">
+
+<div class="card">
+<h3>GPT</h3>
+<p>Advanced reasoning, coding, automation, business analysis and execution workflows.</p>
+</div>
+
+<div class="card">
+<h3>Claude</h3>
+<p>Long-form writing, documentation, strategic planning and executive communication.</p>
+</div>
+
+<div class="card">
+<h3>Gemini</h3>
+<p>Research, synthesis, trend discovery and knowledge-intensive projects.</p>
+</div>
+
+<div class="card">
+<h3>Grok</h3>
+<p>Market intelligence, signal detection and emerging topic analysis.</p>
+</div>
+
+</div>
+
+</section>
+
+<section class="section">
+
+<div class="routing-box">
+
+<h2>One Prompt. Multiple Intelligence Engines.</h2>
+
+<p>
+BLACK evaluates every request and intelligently routes it to the best available AI model in real time.
+</p>
+
+<div class="flow">
+
+<div class="node">Your Request</div>
+
+<div class="arrow">→</div>
+
+<div class="node">BLACK Router</div>
+
+<div class="arrow">→</div>
+
+<div class="node">GPT • Claude • Gemini • Grok</div>
+
+<div class="arrow">→</div>
+
+<div class="node">Executive Output</div>
+
+</div>
+
+</div>
+
+</section>
+
+<section class="section">
+
+<h2 class="section-title">
+Built For Leaders
+</h2>
+
+<div class="grid">
+
+<div class="card">
+<h3>Executive Strategy</h3>
+<p>Market analysis, growth planning, opportunity identification and strategic decision support.</p>
+</div>
+
+<div class="card">
+<h3>Agentic Execution</h3>
+<p>BLACK transforms objectives into structured workflows and actionable plans.</p>
+</div>
+
+<div class="card">
+<h3>Boardroom Intelligence</h3>
+<p>Competitive analysis, executive briefings and investment-grade research.</p>
+</div>
+
+<div class="card">
+<h3>Premium Performance</h3>
+<p>Enterprise-level speed, reasoning and execution without managing multiple AI systems.</p>
+</div>
+
+<div class="card">
+<h3>Multi-Agent Collaboration</h3>
+<p>Research, marketing, operations and product agents working together behind the scenes.</p>
+</div>
+
+<div class="card">
+<h3>Outcome Focused</h3>
+<p>Less prompting. Less tool management. Faster decisions and better outcomes.</p>
+</div>
+
+</div>
+
+</section>
+
+<section class="section launch">
+
+<h2>UNLOCK BLACK</h2>
+
+<p>
+Premium AI for executives, founders, operators and decision-makers.
+Think Bigger. Decide Faster. Execute Smarter.
+</p>
+
+<div class="buttons">
+<button class="btn primary">
+BLACK.GETSERVICES.AI
+</button>
+</div>
+
+</section>
+
+<footer>
+
+BLACK™ • Premium Executive Intelligence Platform
+
+</footer>
+
+</body>
+</html>
