@@ -1,0 +1,24 @@
+import { prisma } from "./PrismaClient";
+
+export class ApplicationRepository {
+  findById(id: string) {
+    return prisma.application.findUnique({
+      where: { id }
+    });
+  }
+
+  findBySlug(slug: string) {
+    return prisma.application.findUnique({
+      where: { slug }
+    });
+  }
+
+  create(data: {
+    name: string;
+    slug: string;
+  }) {
+    return prisma.application.create({
+      data
+    });
+  }
+}
