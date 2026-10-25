@@ -1,0 +1,24 @@
+import { prisma } from "./PrismaClient";
+
+export class UsageRepository {
+
+  createUsage(data: {
+    applicationId: string;
+    providerId: string;
+    modelId: string;
+
+    requests: number;
+
+    inputTokens: number;
+    outputTokens: number;
+
+    estimatedCost: number;
+
+    usageDate: Date;
+  }) {
+
+    return prisma.usageRecord.create({
+      data
+    });
+  }
+}
