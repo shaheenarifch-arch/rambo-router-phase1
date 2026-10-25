@@ -1,0 +1,36 @@
+import { prisma } from "./PrismaClient";
+
+export class ModelRepository {
+
+  getEnabledModels() {
+    return prisma.model.findMany({
+      where: {
+        enabled: true
+      },
+      include: {
+        provider: true
+      }
+    });
+  }
+
+  findById(id: string) {
+    return prisma.model.findUnique({
+      where: { id }
+    });
+  }
+
+  updateScores(
+    id: string,
+    scores: {
+      qualityScore?: number;
+      speedScore?: number;
+      costScore?: number;
+      reliabilityScore?: number;
+    }
+  ) {
+    return prisma.model.update({
+      where: { id },
+      data: scores
+    });
+  }
+}
