@@ -1,0 +1,2 @@
+import { AnthropicProvider,GeminiProvider,MockProvider,OpenAIProvider,type LLMProvider } from "@rambo/providers";
+export function createProviders(){const map=new Map<string,LLMProvider>();map.set("mock",new MockProvider());if(process.env.OPENAI_API_KEY)map.set("openai",new OpenAIProvider(process.env.OPENAI_API_KEY));if(process.env.ANTHROPIC_API_KEY)map.set("anthropic",new AnthropicProvider(process.env.ANTHROPIC_API_KEY));if(process.env.GEMINI_API_KEY)map.set("gemini",new GeminiProvider(process.env.GEMINI_API_KEY));return map;}

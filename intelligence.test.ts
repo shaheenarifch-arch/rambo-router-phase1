@@ -1,0 +1,2 @@
+import {describe,it,expect} from "vitest";import {TaskClassifier,CircuitBreaker} from "../packages/router/src/index.js";
+describe("RAMBO intelligence",()=>{it("classifies architecture",()=>expect(new TaskClassifier().classify("Design a microservice architecture").primaryTask).toBe("architecture"));it("opens circuit",()=>{const c=new CircuitBreaker(2,60000);c.failure();c.failure();expect(c.snapshot().state).toBe("OPEN");expect(c.canExecute()).toBe(false);});});
