@@ -1,0 +1,3 @@
+export type TaskType = "general_chat"|"classification"|"extraction"|"summarization"|"rewriting"|"seo_content"|"coding"|"debugging"|"architecture"|"analytics"|"product_research"|"business_strategy";
+export interface ModelDefinition { id:string; providerId:string; providerModel:string; enabled:boolean; contextWindow:number; maxOutputTokens:number; capabilities:string[]; taskScores:Partial<Record<TaskType,number>>; qualityScore:number; speedScore:number; costScore:number; reliabilityScore:number; }
+export interface RouteDecision { selected:ModelDefinition; alternatives:ModelDefinition[]; reasonCodes:string[]; score:number; }

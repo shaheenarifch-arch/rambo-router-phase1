@@ -1,0 +1,3 @@
+import { describe,it,expect } from "vitest"; import { RoutingEngine } from "../packages/router/src/index.js"; import type { ModelDefinition } from "../packages/core/src/index.js";
+const base=(id:string,quality:number,speed:number,cost:number):ModelDefinition=>({id,providerId:"mock",providerModel:id,enabled:true,contextWindow:32000,maxOutputTokens:4000,capabilities:["text"],taskScores:{coding:quality},qualityScore:quality,speedScore:speed,costScore:cost,reliabilityScore:.9});
+describe("RoutingEngine",()=>{it("prioritizes speed and cost in fast mode",()=>{const r=new RoutingEngine([base("fast",.6,1,1),base("deep",.95,.4,.3)]);expect(r.route({taskType:"coding",mode:"fast"}).selected.id).toBe("fast");});});
