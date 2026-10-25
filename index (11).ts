@@ -1,14 +1,8 @@
-import { z } from "zod";
-export const RamboMessageSchema = z.object({ role: z.enum(["system","user","assistant","tool"]), content: z.string().min(1) });
-export const RamboRequestSchema = z.object({
-  requestId: z.string().optional(), applicationId: z.string().min(1),
-  messages: z.array(RamboMessageSchema).min(1),
-  mode: z.enum(["fast","smart","deep","executive"]).default("smart"),
-  taskType: z.string().default("general_chat"),
-  output: z.object({ format: z.enum(["text","json","markdown"]).default("text") }).optional(),
-  preferences: z.object({ preferredProvider:z.string().optional(), preferredModel:z.string().optional(), maximumLatencyMs:z.number().positive().optional(), maximumCostUsd:z.number().nonnegative().optional(), allowFallback:z.boolean().default(true) }).optional(),
-  generation: z.object({ temperature:z.number().min(0).max(2).optional(), maxOutputTokens:z.number().int().positive().max(32768).optional() }).optional()
-});
-export type RamboRequest = z.infer<typeof RamboRequestSchema>;
-export type RamboMessage = z.infer<typeof RamboMessageSchema>;
-export interface RamboResponse { requestId:string; status:"completed"|"failed"; output:{type:"text"|"json"|"markdown";content:unknown}; routing:{provider:string;model:string;reasonCodes:string[];fallbackUsed:boolean}; usage:{inputTokens?:number;outputTokens?:number;estimatedCostUsd?:number}; latency:{totalMs:number;firstTokenMs?:number}; }
+import type { RamboRequest } from "@rambo/schemas";
+export interface NormalizedProviderResponse { text:string; providerRequestId?:string; inputTokens?:number; outputTokens?:number; finishReason?:string; }
+export interface LLMProvider { readonly providerId:string; healthCheck():Promise<{healthy:boolean;detail?:string}>; generate(request:RamboRequest, model:string):Promise<NormalizedProviderResponse>; }
+export class MockProvider implements LLMProvider {
+  readonly providerId="mock";
+  async healthCheck(){ return {healthy:true}; }
+  async generate(request:RamboRequest, model:string){ const last=[...request.messages].reverse().find(m=>m.role==="user")?.content ?? ""; return {text:`[${model}] RAMBO received: ${last}`,inputTokens:Math.ceil(last.length/4),outputTokens:16,finishReason:"stop"}; }
+}
