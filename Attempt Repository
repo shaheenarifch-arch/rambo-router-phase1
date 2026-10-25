@@ -1,0 +1,22 @@
+import { prisma } from "./PrismaClient";
+
+export class AttemptRepository {
+
+  createAttempt(data: {
+    requestId: string;
+    modelId: string;
+    success: boolean;
+
+    inputTokens?: number;
+    outputTokens?: number;
+
+    latencyMs?: number;
+
+    estimatedCost?: number;
+  }) {
+
+    return prisma.llmAttempt.create({
+      data
+    });
+  }
+}
