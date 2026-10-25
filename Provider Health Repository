@@ -1,0 +1,28 @@
+import { prisma } from "./PrismaClient";
+
+export class ProviderHealthRepository {
+
+  updateHealth(
+    providerId: string,
+    healthy: boolean,
+    latencyMs: number
+  ) {
+
+    return prisma.providerHealth.create({
+      data: {
+        providerId,
+        healthy,
+        latencyMs
+      }
+    });
+  }
+
+  latest(providerId: string) {
+    return prisma.providerHealth.findFirst({
+      where: { providerId },
+      orderBy: {
+        checkedAt: "desc"
+      }
+    });
+  }
+}
