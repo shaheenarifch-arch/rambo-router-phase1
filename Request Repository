@@ -1,0 +1,43 @@
+import { prisma } from "./PrismaClient";
+
+export class RequestRepository {
+
+  createRequest(
+    applicationId: string,
+    taskType: string,
+    mode: string
+  ) {
+    return prisma.llmRequest.create({
+      data: {
+        applicationId,
+        taskType,
+        mode
+      }
+    });
+  }
+
+  completeRequest(
+    requestId: string
+  ) {
+    return prisma.llmRequest.update({
+      where: {
+        id: requestId
+      },
+      data: {
+        status: "COMPLETED",
+        completedAt: new Date()
+      }
+    });
+  }
+
+  failRequest(requestId: string) {
+    return prisma.llmRequest.update({
+      where: {
+        id: requestId
+      },
+      data: {
+        status: "FAILED"
+      }
+    });
+  }
+}
