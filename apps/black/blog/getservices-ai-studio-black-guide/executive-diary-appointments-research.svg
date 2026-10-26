@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-labelledby="t d">
+<title id="t">BLACK for executives: diary, appointments and research</title>
+<desc id="d">Three black-and-gold panels: an executive diary with today's priorities, an appointments calendar with booked meetings, and a research panel with a magnifier over market charts.</desc>
+<defs>
+  <linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff4c8"/><stop offset=".45" stop-color="#e3c46b"/><stop offset="1" stop-color="#9a7414"/></linearGradient>
+  <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0d0b07"/><stop offset="1" stop-color="#030303"/></linearGradient>
+  <linearGradient id="card" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#17130b"/><stop offset="1" stop-color="#080807"/></linearGradient>
+  <radialGradient id="glow" cx=".5" cy="0" r=".9"><stop offset="0" stop-color="#e3c46b" stop-opacity=".22"/><stop offset="1" stop-color="#e3c46b" stop-opacity="0"/></radialGradient>
+  <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="6"/></filter>
+</defs>
+<rect width="1200" height="630" fill="url(#bg)"/>
+<rect width="1200" height="630" fill="url(#glow)"/>
+<g fill="#e3c46b" opacity=".5"><circle cx="90" cy="70" r="1.6"/><circle cx="1110" cy="58" r="1.4"/><circle cx="1040" cy="590" r="1.6"/><circle cx="160" cy="585" r="1.2"/><circle cx="600" cy="36" r="1.3"/><circle cx="760" cy="600" r="1.1"/></g>
+
+<text x="600" y="78" text-anchor="middle" font-family="Space Grotesk, Inter, Arial, sans-serif" font-size="15" letter-spacing="5" fill="#c9b27a">BLACK · EXECUTIVE INTELLIGENCE</text>
+<text x="600" y="122" text-anchor="middle" font-family="Space Grotesk, Inter, Arial, sans-serif" font-size="38" font-weight="700" fill="url(#g)">Your diary, your appointments, your research</text>
+
+<!-- Panel 1: Executive diary -->
+<g transform="translate(60 160)">
+  <rect width="340" height="400" rx="22" fill="url(#card)" stroke="url(#g)" stroke-opacity=".55"/>
+  <g transform="translate(40 40)">
+    <rect x="0" y="0" width="260" height="190" rx="10" fill="#0b0a07" stroke="#e3c46b" stroke-opacity=".5"/>
+    <line x1="130" y1="0" x2="130" y2="190" stroke="#e3c46b" stroke-opacity=".6" stroke-width="2"/>
+    <rect x="-6" y="18" width="10" height="26" rx="3" fill="url(#g)"/>
+    <text x="16" y="30" font-family="Space Grotesk, Arial, sans-serif" font-size="13" fill="#e3c46b" font-weight="600">TODAY</text>
+    <g stroke="#e3c46b" stroke-opacity=".35" stroke-width="2"><line x1="16" y1="52" x2="114" y2="52"/><line x1="16" y1="74" x2="104" y2="74"/><line x1="16" y1="96" x2="114" y2="96"/><line x1="16" y1="118" x2="92" y2="118"/><line x1="16" y1="140" x2="110" y2="140"/></g>
+    <g fill="url(#g)"><circle cx="146" cy="38" r="5"/><circle cx="146" cy="66" r="5"/><circle cx="146" cy="94" r="5"/></g>
+    <g stroke="#f5e4ad" stroke-opacity=".7" stroke-width="2"><line x1="160" y1="38" x2="240" y2="38"/><line x1="160" y1="66" x2="228" y2="66"/><line x1="160" y1="94" x2="236" y2="94"/></g>
+    <path d="M142 128l6 6 12-12" fill="none" stroke="url(#g)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <line x1="168" y1="128" x2="228" y2="128" stroke="#e3c46b" stroke-opacity=".35" stroke-width="2"/>
+    <g transform="translate(205 150) rotate(-35)"><rect width="70" height="9" rx="4" fill="url(#g)"/><path d="M70 0l12 4.5-12 4.5z" fill="#f5e4ad"/></g>
+  </g>
+  <text x="40" y="290" font-family="Space Grotesk, Arial, sans-serif" font-size="26" font-weight="700" fill="url(#g)">Executive diary</text>
+  <text x="40" y="324" font-family="Inter, Arial, sans-serif" font-size="16" fill="#bfb291">Priorities, notes and decisions</text>
+  <text x="40" y="348" font-family="Inter, Arial, sans-serif" font-size="16" fill="#bfb291">captured and briefed daily.</text>
+</g>
+
+<!-- Panel 2: Appointments -->
+<g transform="translate(430 160)">
+  <rect width="340" height="400" rx="22" fill="url(#card)" stroke="url(#g)" stroke-opacity=".55"/>
+  <g transform="translate(40 40)">
+    <rect width="260" height="190" rx="10" fill="#0b0a07" stroke="#e3c46b" stroke-opacity=".5"/>
+    <rect width="260" height="34" rx="10" fill="url(#g)" opacity=".9"/>
+    <rect y="22" width="260" height="12" fill="url(#g)" opacity=".9"/>
+    <text x="16" y="23" font-family="Space Grotesk, Arial, sans-serif" font-size="13" font-weight="700" fill="#140f04" letter-spacing="2">THIS WEEK</text>
+    <g stroke="#e3c46b" stroke-opacity=".18"><line x1="52" y1="34" x2="52" y2="190"/><line x1="104" y1="34" x2="104" y2="190"/><line x1="156" y1="34" x2="156" y2="190"/><line x1="208" y1="34" x2="208" y2="190"/><line x1="0" y1="86" x2="260" y2="86"/><line x1="0" y1="138" x2="260" y2="138"/></g>
+    <rect x="58" y="44" width="40" height="34" rx="6" fill="url(#g)" opacity=".85"/>
+    <rect x="162" y="44" width="40" height="34" rx="6" fill="#e3c46b" opacity=".35"/>
+    <rect x="6" y="96" width="40" height="34" rx="6" fill="#e3c46b" opacity=".35"/>
+    <rect x="110" y="96" width="40" height="34" rx="6" fill="url(#g)" opacity=".85"/>
+    <rect x="214" y="148" width="40" height="34" rx="6" fill="url(#g)" opacity=".85"/>
+    <rect x="58" y="148" width="40" height="34" rx="6" fill="#e3c46b" opacity=".35"/>
+    <g transform="translate(230 170)"><circle r="30" fill="#0b0a07" stroke="url(#g)" stroke-width="3"/><path d="M0-18V0l12 8" fill="none" stroke="#f5e4ad" stroke-width="3" stroke-linecap="round"/></g>
+  </g>
+  <text x="40" y="290" font-family="Space Grotesk, Arial, sans-serif" font-size="26" font-weight="700" fill="url(#g)">Appointments</text>
+  <text x="40" y="324" font-family="Inter, Arial, sans-serif" font-size="16" fill="#bfb291">Meetings booked, reminded and</text>
+  <text x="40" y="348" font-family="Inter, Arial, sans-serif" font-size="16" fill="#bfb291">prepped with a brief beforehand.</text>
+</g>
+
+<!-- Panel 3: Research -->
+<g transform="translate(800 160)">
+  <rect width="340" height="400" rx="22" fill="url(#card)" stroke="url(#g)" stroke-opacity=".55"/>
+  <g transform="translate(40 40)">
+    <rect width="260" height="190" rx="10" fill="#0b0a07" stroke="#e3c46b" stroke-opacity=".5"/>
+    <g fill="#e3c46b"><rect x="20" y="120" width="22" height="50" rx="3" opacity=".35"/><rect x="52" y="96" width="22" height="74" rx="3" opacity=".5"/><rect x="84" y="108" width="22" height="62" rx="3" opacity=".35"/><rect x="116" y="70" width="22" height="100" rx="3" opacity=".7"/></g>
+    <polyline points="20,100 63,78 95,88 127,48 160,40" fill="none" stroke="url(#g)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <g stroke="#e3c46b" stroke-opacity=".35" stroke-width="2"><line x1="20" y1="24" x2="120" y2="24"/><line x1="20" y1="40" x2="96" y2="40"/></g>
+    <g transform="translate(180 92)">
+      <circle r="44" fill="#e3c46b" opacity=".08" filter="url(#soft)"/>
+      <circle r="38" fill="#0b0a07" fill-opacity=".6" stroke="url(#g)" stroke-width="5"/>
+      <path d="M-20 10 L-6 -4 L6 4 L22 -16" fill="none" stroke="#f5e4ad" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      <line x1="27" y1="27" x2="58" y2="58" stroke="url(#g)" stroke-width="10" stroke-linecap="round"/>
+    </g>
+  </g>
+  <text x="40" y="290" font-family="Space Grotesk, Arial, sans-serif" font-size="26" font-weight="700" fill="url(#g)">Research</text>
+  <text x="40" y="324" font-family="Inter, Arial, sans-serif" font-size="16" fill="#bfb291">Markets and competitors, routed</text>
+  <text x="40" y="348" font-family="Inter, Arial, sans-serif" font-size="16" fill="#bfb291">by RAMBO to the right model.</text>
+</g>
+
+<text x="600" y="602" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="14" fill="#8a7d5c" letter-spacing="2">black.getservices.ai</text>
+</svg>
