@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BLACK™ Console</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#050505">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/black.css">
+<script>
+  // Preview gate: send visitors without access back to the unlock screen.
+  try { if (localStorage.getItem("black.access") !== "preview") location.replace("index.html?unlock=1"); } catch (e) {}
+</script>
+<style>
+body{height:100vh;height:100dvh;overflow:hidden}
+.shell{display:grid;grid-template-columns:268px 1fr;height:100%}
+/* Rail */
+.rail{border-right:1px solid var(--line);background:rgba(8,8,8,.85);display:flex;flex-direction:column;padding:18px 14px;gap:14px;min-height:0}
+.rail .wordmark{font-size:18px;padding:4px 8px 10px}
+.rail .new{justify-content:flex-start}
+.rail h4{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);padding:8px 8px 0;font-weight:500}
+.history{list-style:none;overflow:auto;flex:1;min-height:0;display:grid;align-content:start;gap:2px}
+.history button{width:100%;text-align:left;padding:9px 10px;border-radius:10px;color:#cfcabf;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.history button:hover,.history button.active{background:var(--surface-2);color:var(--text)}
+.history .empty{color:var(--dim);font-size:13px;padding:6px 10px}
+.rail-foot{display:grid;gap:8px;border-top:1px solid var(--line);padding-top:12px}
+.rail-foot a{font-size:14px;color:var(--muted);padding:6px 8px;border-radius:8px}
+.rail-foot a:hover{color:var(--gold)}
+/* Main */
+.main{display:flex;flex-direction:column;min-width:0;min-height:0}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 22px;border-bottom:1px solid var(--line)}
+.topbar .left{display:flex;align-items:center;gap:12px;min-width:0}
+.rail-toggle{display:none;width:38px;height:38px;border-radius:10px;border:1px solid var(--line);align-items:center;justify-content:center}
+.status{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:6px 12px;white-space:nowrap}
+.status .led{width:7px;height:7px;border-radius:50%;background:var(--warn)}
+.status.live .led{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+.badge-exec{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#0a0a0a;background:var(--gold-grad);padding:6px 12px;border-radius:999px;font-weight:700;white-space:nowrap}
+.scroll{flex:1;overflow:auto;min-height:0}
+.wrap{max-width:860px;margin:0 auto;padding:40px 22px 24px}
+.welcome{text-align:center;padding:5vh 0 26px;animation:rise .6s ease both}
+.welcome h1{font-size:clamp(28px,4.4vw,44px);letter-spacing:-.02em;font-weight:600}
+.welcome p{color:var(--muted);margin-top:8px}
+.tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:30px}
+.tile{text-align:left;padding:18px;border-radius:16px;background:var(--surface);border:1px solid var(--line);transition:border-color .2s,transform .2s}
+.tile:hover{border-color:var(--line-gold);transform:translateY(-2px)}
+.tile strong{display:block;color:var(--gold);font-weight:600;margin-bottom:4px}
+.tile span{color:var(--muted);font-size:14px}
+/* Thread */
+.msg{margin:22px 0;animation:rise .35s ease both}
+.msg.user{display:flex;justify-content:flex-end}
+.msg.user .bubble{background:var(--surface-2);border:1px solid var(--line);border-radius:18px 18px 4px 18px;padding:14px 18px;max-width:80%;white-space:pre-wrap;word-wrap:break-word}
+.answer{background:linear-gradient(180deg,rgba(227,196,107,.05),rgba(255,255,255,.015));border:1px solid var(--line-gold);border-radius:20px;padding:22px 24px}
+.answer .head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.answer .who{font-weight:700;letter-spacing:.3em;color:var(--gold);font-size:13px}
+.answer .body{color:#e8e4da;word-wrap:break-word}
+.answer .body h3{font-size:17px;color:var(--gold);margin:16px 0 6px}
+.answer .body p{margin:8px 0}
+.answer .body ul{margin:8px 0 8px 20px}
+.answer .body code{background:rgba(255,255,255,.07);padding:1px 6px;border-radius:6px;font-size:.92em}
+.answer .body pre{background:#0a0a0a;border:1px solid var(--line);border-radius:12px;padding:14px;overflow:auto;margin:10px 0}
+.answer .body pre code{background:none;padding:0}
+.trail{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px}
+.chip{font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:5px 10px;white-space:nowrap}
+.chip b{color:var(--text);font-weight:500}
+.chip.warn{border-color:rgba(240,179,90,.4);color:var(--warn)}
+.cands{margin-top:14px}
+.cands summary{cursor:pointer;color:var(--gold);font-size:14px}
+.cands .c{margin-top:10px;padding:12px 14px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--line);font-size:14px;color:#cfcabf;white-space:pre-wrap}
+.thinking{display:inline-flex;gap:6px;align-items:center;color:var(--muted);font-size:14px}
+.thinking i{width:6px;height:6px;border-radius:50%;background:var(--gold);animation:pulse 1.2s infinite ease-in-out}
+.thinking i:nth-child(2){animation-delay:.15s}.thinking i:nth-child(3){animation-delay:.3s}
+@keyframes pulse{0%,100%{opacity:.25}50%{opacity:1}}
+.error{color:#f2a7a0}
+/* Composer */
+.composer{padding:12px 22px 20px}
+.composer .box{max-width:860px;margin:0 auto;background:#0c0c0c;border:1px solid var(--line-gold);border-radius:20px;padding:12px;box-shadow:0 0 0 6px rgba(227,196,107,.03)}
+.composer textarea{width:100%;resize:none;background:transparent;border:0;outline:0;color:var(--text);font:inherit;font-size:16px;line-height:1.5;padding:6px 8px;max-height:220px;min-height:52px}
+.composer .row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:6px}
+.modes{display:inline-flex;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:3px}
+.modes button{padding:7px 12px;border-radius:9px;font-size:13px;color:var(--muted)}
+.modes button[aria-pressed="true"]{background:var(--gold-grad);color:#0a0a0a;font-weight:600}
+.composer .meta{display:flex;align-items:center;gap:10px}
+.detect{font-size:12px;color:var(--dim)}
+.detect b{color:var(--gold);font-weight:500}
+.send{width:42px;height:42px;border-radius:12px;background:var(--gold-grad);color:#0a0a0a;display:inline-flex;align-items:center;justify-content:center}
+.send:disabled{opacity:.4;cursor:not-allowed}
+.hint{text-align:center;font-size:12px;color:var(--dim);margin-top:10px}
+.scrim{display:none}
+@media(max-width:860px){
+  .shell{grid-template-columns:1fr}
+  .rail{position:fixed;inset:0 auto 0 0;width:280px;z-index:50;background:#080808;transform:translateX(-100%);transition:transform .25s}
+  .rail.open{transform:none}
+  .scrim.open{display:block;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:40}
+  .rail-toggle{display:inline-flex}
+  .topbar{padding:12px 16px}
+  .wrap{padding:24px 16px}
+  .composer{padding:10px 16px 14px}
+  .tiles{grid-template-columns:1fr}
+  .badge-exec{display:none}
+  .msg.user .bubble{max-width:92%}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="rail" id="rail" aria-label="Briefs">
+    <a href="index.html" class="wordmark">BLACK<span class="tm">™</span></a>
+    <button class="btn btn-ghost btn-sm new" id="new-brief">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      New brief
+    </button>
+    <h4>Recent briefs</h4>
+    <ul class="history" id="history"></ul>
+    <div class="rail-foot">
+      <a href="#" id="studio-link">← Back to AI Studio</a>
+      <a href="index.html">About BLACK</a>
+    </div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="left">
+        <button class="rail-toggle" id="rail-toggle" aria-label="Open briefs" aria-controls="rail" aria-expanded="false">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+        <span class="status" id="status"><span class="led"></span><span id="status-text">Preview mode</span></span>
+      </div>
+      <span class="badge-exec">Black Edition</span>
+    </header>
+
+    <div class="scroll" id="scroll">
+      <div class="wrap">
+        <section class="welcome" id="welcome">
+          <h1><span id="greeting">Good evening</span>. <span class="gold-text">What are we deciding today?</span></h1>
+          <p>One brief. BLACK routes it to the right intelligence engine.</p>
+          <div class="tiles">
+            <button class="tile" data-prompt="Prepare a one-page board briefing on our growth strategy for next quarter: priorities, risks and the decisions we need."><strong>Board briefing</strong><span>One-page executive summary with decisions needed</span></button>
+            <button class="tile" data-prompt="Run a market scan for AI services for small businesses in the US: trends, competitor moves and where the opportunity is."><strong>Market scan</strong><span>Trends, competitor moves and openings</span></button>
+            <button class="tile" data-prompt="Build a 90-day growth plan with weekly milestones, owners and the metrics that prove it's working."><strong>90-day growth plan</strong><span>Milestones, owners and success metrics</span></button>
+            <button class="tile" data-mode="executive" data-prompt="Should we launch a premium tier now or wait two quarters? Give the case for each and a recommendation."><strong>Executive decision</strong><span>Multiple models weigh in, disagreements flagged</span></button>
+          </div>
+        </section>
+        <div id="thread" aria-live="polite"></div>
+      </div>
+    </div>
+
+    <form class="composer" id="composer" autocomplete="off">
+      <div class="box">
+        <label for="prompt" class="sr-only" style="position:absolute;left:-9999px">Your brief</label>
+        <textarea id="prompt" rows="2" placeholder="Brief BLACK on anything: a decision, a plan, a market, a document…"></textarea>
+        <div class="row">
+          <div class="modes" role="group" aria-label="Mode">
+            <button type="button" data-m="fast" aria-pressed="false">Fast</button>
+            <button type="button" data-m="smart" aria-pressed="true">Smart</button>
+            <button type="button" data-m="deep" aria-pressed="false">Deep</button>
+            <button type="button" data-m="executive" aria-pressed="false">Executive</button>
+          </div>
+          <div class="meta">
+            <span class="detect" id="detect"></span>
+            <button class="send" id="send" type="submit" aria-label="Send brief" disabled>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      <p class="hint">Enter to send · Shift+Enter for a new line</p>
+    </form>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

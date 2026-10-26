@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BLACK™ | Premium Agentic Intelligence by GetServices.ai</title>
+<meta name="description" content="BLACK is the executive AI platform from GetServices.ai. One prompt, intelligently routed across GPT, Claude and Gemini, with Executive Mode synthesis for high-stakes decisions.">
+<meta name="theme-color" content="#050505">
+<link rel="canonical" href="https://black.getservices.ai/">
+<meta property="og:title" content="BLACK™ | Premium Agentic Intelligence">
+<meta property="og:description" content="The executive AI platform that thinks, routes and executes.">
+<meta property="og:url" content="https://black.getservices.ai/">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/black.css">
+<style>
+nav.top{position:fixed;inset:0 0 auto 0;display:flex;justify-content:space-between;align-items:center;padding:18px 5%;backdrop-filter:blur(16px);background:rgba(5,5,5,.6);border-bottom:1px solid var(--line);z-index:100}
+.menu{display:flex;gap:28px;align-items:center}
+.menu a:not(.btn){color:var(--muted);font-size:15px;transition:color .2s}
+.menu a:not(.btn):hover{color:var(--gold)}
+.menu-toggle{display:none;width:40px;height:40px;border-radius:10px;border:1px solid var(--line)}
+.hero{min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:140px 5% 90px}
+.hero-inner{max-width:1100px;animation:rise .8s ease both}
+.hero h1{font-size:clamp(64px,13vw,150px);line-height:.95;letter-spacing:-.04em;margin:28px 0 22px;font-weight:700}
+.hero p{max-width:760px;margin:0 auto;font-size:clamp(17px,2.1vw,22px);color:#cfcabf}
+.buttons{margin-top:44px;display:flex;justify-content:center;gap:14px;flex-wrap:wrap}
+.buttons .btn{padding:17px 32px;font-size:17px}
+.trust{margin-top:38px;color:var(--dim);font-size:13px;letter-spacing:.18em;text-transform:uppercase}
+.section{padding:110px 5%}
+.section-title{text-align:center;font-size:clamp(34px,5vw,58px);letter-spacing:-.02em;margin-bottom:16px}
+.section-description{text-align:center;color:var(--muted);max-width:760px;margin:0 auto 60px;font-size:18px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;max-width:1240px;margin:0 auto}
+.card h3{color:var(--gold);margin-bottom:10px;font-size:24px;display:flex;align-items:center;gap:10px}
+.card p{color:#c4c0b6}
+.tag{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:3px 9px;font-weight:500}
+.routing-box{max-width:1240px;margin:0 auto;background:linear-gradient(135deg,rgba(227,196,107,.12),rgba(255,255,255,.02));border-radius:28px;border:1px solid var(--line-gold);padding:clamp(32px,6vw,70px);text-align:center}
+.routing-box h2{font-size:clamp(28px,4.2vw,48px);margin-bottom:14px;letter-spacing:-.02em}
+.routing-box p{color:var(--muted);max-width:700px;margin:0 auto}
+.flow{margin-top:44px;display:flex;justify-content:center;align-items:center;gap:14px;flex-wrap:wrap}
+.node{padding:16px 22px;border-radius:14px;border:1px solid var(--line-gold);background:#070707}
+.node.gold{background:var(--gold-grad);color:#0a0a0a;font-weight:700;border:0}
+.arrow{color:var(--gold);font-size:26px}
+.steps{counter-reset:s;max-width:1000px;margin:0 auto;display:grid;gap:16px}
+.step{display:flex;gap:20px;align-items:flex-start}
+.step::before{counter-increment:s;content:counter(s,decimal-leading-zero);font-size:14px;color:var(--gold);border:1px solid var(--line-gold);border-radius:12px;padding:10px 12px;flex:0 0 auto}
+.step h3{font-size:20px;margin-bottom:4px}
+.step p{color:var(--muted)}
+.launch{text-align:center}
+.launch h2{font-size:clamp(48px,9vw,96px);letter-spacing:-.03em;margin-bottom:18px}
+.launch p{max-width:760px;margin:0 auto;color:#cfcabf;font-size:20px}
+footer{padding:36px 5%;text-align:center;border-top:1px solid var(--line);color:var(--dim);font-size:14px}
+footer a:hover{color:var(--gold)}
+@media(max-width:820px){
+  .menu{display:none;position:absolute;top:100%;left:0;right:0;flex-direction:column;align-items:stretch;gap:0;background:#070707;border-bottom:1px solid var(--line);padding:8px 16px 16px}
+  .menu.open{display:flex}
+  .menu a:not(.btn){padding:12px 4px;border-bottom:1px solid var(--line)}
+  .menu .btn{margin-top:12px}
+  .menu-toggle{display:inline-flex;align-items:center;justify-content:center}
+  nav.top{padding:14px 16px}
+  .section{padding:80px 16px}
+  .hero{padding:120px 16px 70px}
+  .arrow{transform:rotate(90deg)}
+  .flow{flex-direction:column}
+}
+</style>
+</head>
+<body>
+
+<nav class="top" aria-label="Main">
+  <a href="#" class="wordmark">BLACK<span class="tm">™</span></a>
+  <button class="menu-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="menu">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+  </button>
+  <div class="menu" id="menu">
+    <a href="#platform">Platform</a>
+    <a href="#intelligence">Intelligence</a>
+    <a href="#leaders">Enterprise</a>
+    <a href="mailto:agents@getservices.ai">Contact</a>
+    <a href="#unlock" class="btn btn-gold btn-sm" data-unlock>Unlock BLACK</a>
+  </div>
+</nav>
+
+<main>
+<section class="hero">
+  <div class="hero-inner">
+    <span class="eyebrow"><span class="dot"></span>Premium agentic intelligence</span>
+    <h1 class="gold-text">BLACK™</h1>
+    <p>The executive AI platform that thinks, routes and executes. Intelligent auto-routing across GPT, Claude and Gemini, without ever switching models.</p>
+    <div class="buttons">
+      <a href="#unlock" class="btn btn-gold" data-unlock>Unlock BLACK</a>
+      <a href="#platform" class="btn btn-ghost">See how it works</a>
+    </div>
+    <div class="trust">A GetServices.ai edition · Powered by the RAMBO router</div>
+  </div>
+</section>
+
+<section class="section" id="platform">
+  <h2 class="section-title">Intelligent auto-routing</h2>
+  <p class="section-description">BLACK selects the most capable model for every task. No model switching. No prompt engineering. No guesswork.</p>
+  <div class="grid">
+    <div class="card"><h3>GPT</h3><p>Advanced reasoning, coding, automation, business analysis and execution workflows.</p></div>
+    <div class="card"><h3>Claude</h3><p>Long-form writing, documentation, strategic planning and executive communication.</p></div>
+    <div class="card"><h3>Gemini</h3><p>Research, synthesis, trend discovery and knowledge-intensive projects.</p></div>
+    <div class="card"><h3>Grok <span class="tag">Coming soon</span></h3><p>Market intelligence, signal detection and emerging topic analysis.</p></div>
+  </div>
+</section>
+
+<section class="section" id="intelligence">
+  <div class="routing-box">
+    <h2>One prompt. Multiple intelligence engines.</h2>
+    <p>BLACK evaluates every request and routes it to the best available model in real time, with automatic fallback if a provider is down.</p>
+    <div class="flow">
+      <div class="node">Your request</div><div class="arrow">→</div>
+      <div class="node gold">BLACK Router</div><div class="arrow">→</div>
+      <div class="node">GPT · Claude · Gemini</div><div class="arrow">→</div>
+      <div class="node">Executive output</div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <h2 class="section-title">Executive Mode</h2>
+  <p class="section-description">For decisions that matter, BLACK asks several models at once and shows you where they agree, and where they don't.</p>
+  <div class="steps">
+    <div class="card step"><div><h3>Parallel analysis</h3><p>Your brief goes to multiple independent models simultaneously.</p></div></div>
+    <div class="card step"><div><h3>Disagreement detection</h3><p>Material conflicts between answers are flagged instead of hidden.</p></div></div>
+    <div class="card step"><div><h3>Transparent synthesis</h3><p>One executive answer, with every candidate and the routing trail available on demand.</p></div></div>
+  </div>
+</section>
+
+<section class="section" id="leaders">
+  <h2 class="section-title">Built for leaders</h2>
+  <p class="section-description">Premium AI for executives, founders, operators and decision-makers.</p>
+  <div class="grid">
+    <div class="card"><h3>Executive strategy</h3><p>Market analysis, growth planning, opportunity identification and decision support.</p></div>
+    <div class="card"><h3>Agentic execution</h3><p>Objectives turned into structured workflows and actionable plans.</p></div>
+    <div class="card"><h3>Boardroom intelligence</h3><p>Competitive analysis, executive briefings and investment-grade research.</p></div>
+    <div class="card"><h3>Premium performance</h3><p>Enterprise-level speed and reasoning without managing multiple AI systems.</p></div>
+    <div class="card"><h3>Multi-agent collaboration</h3><p>Research, marketing, operations and product agents working together behind the scenes.</p></div>
+    <div class="card"><h3>Outcome focused</h3><p>Less prompting. Less tool management. Faster decisions and better outcomes.</p></div>
+  </div>
+</section>
+
+<section class="section launch">
+  <h2 class="gold-text">UNLOCK BLACK</h2>
+  <p>Think bigger. Decide faster. Execute smarter.</p>
+  <div class="buttons"><a href="#unlock" class="btn btn-gold" data-unlock>Enter BLACK</a></div>
+</section>
+</main>
+
+<footer>
+  BLACK™ · Premium Executive Intelligence · <a href="https://getservices.ai">GetServices.ai</a> · <a href="https://studio.getservices.ai">AI Studio</a>
+</footer>
+
+<div class="modal-backdrop" id="unlock-modal" role="dialog" aria-modal="true" aria-labelledby="unlock-title" aria-hidden="true">
+  <div class="modal">
+    <button class="close" data-close aria-label="Close">✕</button>
+    <span class="eyebrow"><span class="dot"></span>Black Edition</span>
+    <h2 id="unlock-title">Unlock <span class="gold-text">BLACK</span></h2>
+    <p>Your executive AI console from GetServices.ai, the premium edition of AI Studio.</p>
+    <ul class="perks">
+      <li>Auto-routing across GPT, Claude and Gemini</li>
+      <li>Executive Mode: parallel models, flagged disagreements, one synthesis</li>
+      <li>Full routing transparency: model, reason, latency and cost</li>
+      <li>Private brief history</li>
+    </ul>
+    <button class="btn btn-gold" data-enter>Enter BLACK</button>
+    <p class="fine">Early access preview. Membership billing is coming soon.</p>
+  </div>
+</div>
+
+<script>
+(function(){var t=document.querySelector('.menu-toggle'),m=document.getElementById('menu');
+t.addEventListener('click',function(){var o=m.classList.toggle('open');t.setAttribute('aria-expanded',o)});
+m.querySelectorAll('a').forEach(function(a){a.addEventListener('click',function(){m.classList.remove('open');t.setAttribute('aria-expanded','false')})});})();
+</script>
+<script src="assets/unlock.js"></script>
+</body>
+</html>
