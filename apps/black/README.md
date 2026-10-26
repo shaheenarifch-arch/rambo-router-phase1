@@ -4,7 +4,7 @@ Static front end for BLACK™, the dark-and-gold executive edition of GetService
 
 | File | Purpose |
 |---|---|
-| `index.html` | Landing page with the **Unlock BLACK** button and unlock modal |
+| `index.html` | Landing page with the **Unlock BLACK** button, unlock modal and the live "Your agents, at work" executive showcase (inline SVG + ~3 KB JS, no images) |
 | `app.html` | BLACK Console: briefs, Fast / Smart / Deep / Executive modes, routing trail |
 | `config.js` | Runtime config (`apiBase`, `applicationId`, `studioUrl`) |
 | `assets/black.css` | Shared dark + gold design tokens and components |
