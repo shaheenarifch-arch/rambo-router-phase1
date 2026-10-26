@@ -36,6 +36,13 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:0}
 
 .wordmark{font-weight:700;letter-spacing:.42em;color:var(--gold);font-size:22px;display:inline-flex;align-items:center;gap:10px}
 .wordmark .tm{font-size:.45em;letter-spacing:0;vertical-align:super;opacity:.8}
+/* Gold GetServices.ai molecular logo (replaces the TM mark) */
+.bk-logo{display:inline-block;width:.8em;height:.8em;flex:none;vertical-align:middle;margin-left:.15em;filter:drop-shadow(0 0 4px rgba(227,196,107,.55));animation:bk-logo-glow 3.2s ease-in-out infinite}
+.wordmark .bk-logo{width:1.05em;height:1.05em;margin-left:-.2em}
+.bk-logo-hero{width:.42em;height:.42em;vertical-align:.55em;margin-left:.08em}
+.bk-logo-sm{width:1.1em;height:1.1em;vertical-align:-.2em;margin-left:.25em}
+@keyframes bk-logo-glow{50%{filter:drop-shadow(0 0 9px rgba(255,224,138,.85))}}
+@media (prefers-reduced-motion:reduce){.bk-logo{animation:none}}
 .gold-text{background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
 .eyebrow{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:999px;border:1px solid var(--line-gold);background:rgba(227,196,107,.07);color:var(--gold);font-size:12px;letter-spacing:.22em;text-transform:uppercase}
 .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--gold);box-shadow:0 0 10px var(--gold)}
