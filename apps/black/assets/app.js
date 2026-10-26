@@ -2,9 +2,13 @@
 (function () {
   "use strict";
   var CFG = window.BLACK_CONFIG || {};
+  // Same-origin gateway (functions/v1/responses.js) unless config.js points elsewhere.
   var API = (CFG.apiBase || "").replace(/\/+$/, "");
-  var LIVE = !!API;
+  var LIVE = false;
   var STORE = "black.briefs";
+  var CODE_KEY = "black.code";
+  function getCode() { try { return localStorage.getItem(CODE_KEY) || ""; } catch (e) { return ""; } }
+  function setCode(v) { try { v ? localStorage.setItem(CODE_KEY, v) : localStorage.removeItem(CODE_KEY); } catch (e) {} }
 
   // Same deterministic rules as the RAMBO TaskClassifier (classifier.ts), so the hint matches the router.
   var RULES = [
@@ -44,8 +48,26 @@
   var h = new Date().getHours();
   el.greeting.textContent = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
   el.studio.href = CFG.studioUrl || "https://studio.getservices.ai";
-  if (LIVE) { el.status.classList.add("live"); el.statusText.textContent = "RAMBO connected"; }
-  else { el.statusText.textContent = "Preview mode"; el.status.title = "Set apiBase in config.js to connect the RAMBO gateway"; }
+  var ENGINES = [];
+  function setStatus() {
+    el.status.classList.toggle("live", LIVE);
+    if (LIVE) { el.statusText.textContent = "Live · " + ENGINES.join(" · "); el.status.title = "Connected to the BLACK gateway"; }
+    else if (ENGINES.length) { el.statusText.textContent = "Preview · enter access code"; el.status.title = "Enter your access code for live answers"; }
+    else { el.statusText.textContent = "Preview mode"; el.status.title = "The live gateway isn't configured yet"; }
+  }
+  function probe() {
+    fetch(API + "/v1/responses", { headers: { accept: "application/json" } })
+      .then(function (r) { return r.ok ? r.json() : { live: false, engines: [] }; })
+      .then(function (j) { ENGINES = j.engines || []; LIVE = !!j.live && !!getCode(); setStatus(); })
+      .catch(function () { ENGINES = []; LIVE = false; setStatus(); });
+  }
+  el.status.addEventListener("click", function () {
+    if (!ENGINES.length) return;
+    var v = window.prompt(LIVE ? "Change your BLACK access code (leave empty to switch to Preview):" : "Enter your BLACK access code for live answers:", getCode());
+    if (v === null) return;
+    setCode(v.trim()); probe();
+  });
+  setStatus(); probe();
 
   document.querySelectorAll(".modes button").forEach(function (b) {
     b.addEventListener("click", function () { setMode(b.dataset.m); el.prompt.focus(); });
@@ -146,7 +168,7 @@
     return fetch(API + "/v1/responses", {
       method: "POST",
       credentials: "include",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "x-black-access": getCode() },
       body: JSON.stringify(body)
     }).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (j) {
@@ -167,7 +189,9 @@
     });
   }
   function errorText(status, j) {
-    if (status === 401 || status === 403) return "BLACK couldn't sign you in to the gateway. Open AI Studio, sign in, and try again.";
+    if (status === 401 || status === 403) { LIVE = false; setStatus(); return "Your access code wasn't accepted. Tap the status badge at the top to enter it again."; }
+    if (status === 413) return "That brief is too long. Shorten it or start a new brief.";
+    if (status === 502) return "Every engine failed to answer this time. Try again in a moment.";
     if (status === 429) return "You're sending briefs quickly. Wait a moment and try again.";
     if (status === 503) return "No intelligence engine is available right now. Try again shortly.";
     return "The gateway returned " + status + (j && j.error ? " (" + j.error + ")" : "") + ".";
@@ -179,7 +203,7 @@
     var engine = mode === "fast" ? "fast engine" : deep ? "deep reasoning engine" : "balanced engine";
     var lines = [
       "### Preview mode",
-      "BLACK isn't connected to the RAMBO gateway yet, so no model was called for this brief.",
+      "Live answers are off in this browser, so no model was called for this brief.",
       "",
       "### How this brief would be routed",
       "- **Task detected:** " + LABELS[taskType],
@@ -187,7 +211,7 @@
       "- **Engine:** " + engine
     ];
     if (mode === "executive") lines.push("- **Executive Mode:** sent to at least two independent models in parallel, with disagreements flagged and one synthesis returned");
-    lines.push("", "To get live answers, set `apiBase` in `config.js` to the RAMBO gateway URL.");
+    lines.push("", ENGINES.length ? "Tap the status badge at the top and enter your access code to get live answers." : "The live gateway isn't configured yet.");
     return new Promise(function (resolve) {
       setTimeout(function () {
         resolve({ content: lines.join("\n"), meta: { preview: true, mode: mode, taskType: taskType, reasons: ["PREVIEW_NO_MODEL_CALLED"] } });
@@ -235,7 +259,8 @@
       det.innerHTML = "<summary>View " + meta.candidates.length + " candidate answers</summary>";
       meta.candidates.forEach(function (c, i) {
         var cd = document.createElement("div"); cd.className = "c";
-        cd.textContent = "Candidate " + (i + 1) + (c.model ? " (" + c.model + ")" : "") + "\n" + (c.text || "");
+        cd.innerHTML = "<strong></strong>" + md(c.text || "");
+        cd.querySelector("strong").textContent = "Candidate " + (i + 1) + (c.model ? " · " + c.model : "");
         det.appendChild(cd);
       });
       a.appendChild(det);
