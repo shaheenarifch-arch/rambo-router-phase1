@@ -38,3 +38,5 @@ curl -s -X POST http://localhost:8080/v1/responses \
 3. Hash and rotate application API keys instead of one environment key.
 4. Persist requests and attempts.
 5. Add provider health checks and controlled fallback.
+
+<!-- redeploy: BLACK executive showcase (PR #5) -->
