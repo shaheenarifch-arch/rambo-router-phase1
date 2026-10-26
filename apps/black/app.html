@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/black.css">
+<link rel="stylesheet" href="assets/black.css?v=2">
 <script>
   // Preview gate: send visitors without access back to the unlock screen.
   try { if (localStorage.getItem("black.access") !== "preview") location.replace("index.html?unlock=1"); } catch (e) {}
@@ -111,7 +111,7 @@ body{height:100vh;height:100dvh;overflow:hidden}
 <body>
 <div class="shell">
   <aside class="rail" id="rail" aria-label="Briefs">
-    <a href="index.html" class="wordmark">BLACK<svg class="bk-logo" viewBox="0 0 64 64" role="img" aria-label="GetServices.ai"><defs><linearGradient id="bk-gold-app" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="64" y2="64"><stop offset="0" stop-color="#fff4c8"/><stop offset=".45" stop-color="#e3c46b"/><stop offset="1" stop-color="#9a7414"/></linearGradient></defs><g stroke="url(#bk-gold-app)" stroke-width="3.37"><line x1="32" y1="23.67" x2="32" y2="7.51"/><line x1="39.21" y1="27.84" x2="53.21" y2="19.76"/><line x1="39.21" y1="36.16" x2="53.21" y2="44.24"/><line x1="32" y1="40.33" x2="32" y2="56.49"/><line x1="24.79" y1="36.16" x2="10.79" y2="44.24"/><line x1="24.79" y1="27.84" x2="10.79" y2="19.76"/></g><g fill="url(#bk-gold-app)"><circle cx="32" cy="7.51" r="5.51"/><circle cx="53.21" cy="19.76" r="5.51"/><circle cx="53.21" cy="44.24" r="5.51"/><circle cx="32" cy="56.49" r="5.51"/><circle cx="10.79" cy="44.24" r="5.51"/><circle cx="10.79" cy="19.76" r="5.51"/><path fill-rule="evenodd" d="M32,21.59 L41.01,26.8 L41.01,37.2 L32,42.41 L22.99,37.2 L22.99,26.8 Z M32,27.1 L36.24,29.55 L36.24,34.45 L32,36.9 L27.76,34.45 L27.76,29.55 Z"/></g></svg></a>
+    <a href="index.html" class="wordmark">BLACK<svg width="1em" height="1em" class="bk-logo" viewBox="0 0 64 64" role="img" aria-label="GetServices.ai"><defs><linearGradient id="bk-gold-app" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="64" y2="64"><stop offset="0" stop-color="#fff4c8"/><stop offset=".45" stop-color="#e3c46b"/><stop offset="1" stop-color="#9a7414"/></linearGradient></defs><g stroke="url(#bk-gold-app)" stroke-width="3.37"><line x1="32" y1="23.67" x2="32" y2="7.51"/><line x1="39.21" y1="27.84" x2="53.21" y2="19.76"/><line x1="39.21" y1="36.16" x2="53.21" y2="44.24"/><line x1="32" y1="40.33" x2="32" y2="56.49"/><line x1="24.79" y1="36.16" x2="10.79" y2="44.24"/><line x1="24.79" y1="27.84" x2="10.79" y2="19.76"/></g><g fill="url(#bk-gold-app)"><circle cx="32" cy="7.51" r="5.51"/><circle cx="53.21" cy="19.76" r="5.51"/><circle cx="53.21" cy="44.24" r="5.51"/><circle cx="32" cy="56.49" r="5.51"/><circle cx="10.79" cy="44.24" r="5.51"/><circle cx="10.79" cy="19.76" r="5.51"/><path fill-rule="evenodd" d="M32,21.59 L41.01,26.8 L41.01,37.2 L32,42.41 L22.99,37.2 L22.99,26.8 Z M32,27.1 L36.24,29.55 L36.24,34.45 L32,36.9 L27.76,34.45 L27.76,29.55 Z"/></g></svg></a>
     <button class="btn btn-ghost btn-sm new" id="new-brief">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
       New brief
