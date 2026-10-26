@@ -68,7 +68,10 @@ body{height:100vh;height:100dvh;overflow:hidden}
 .chip.warn{border-color:rgba(240,179,90,.4);color:var(--warn)}
 .cands{margin-top:14px}
 .cands summary{cursor:pointer;color:var(--gold);font-size:14px}
-.cands .c{margin-top:10px;padding:12px 14px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--line);font-size:14px;color:#cfcabf;white-space:pre-wrap}
+.cands .c{margin-top:10px;padding:12px 14px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--line);font-size:14px;color:#cfcabf}
+.cands .c strong{display:block;color:var(--gold);font-weight:500;margin-bottom:4px}
+.cands .c h3{font-size:15px;margin:8px 0 4px;color:#e8e4da}
+.cands .c ul{margin:6px 0 6px 18px}
 .thinking{display:inline-flex;gap:6px;align-items:center;color:var(--muted);font-size:14px}
 .thinking i{width:6px;height:6px;border-radius:50%;background:var(--gold);animation:pulse 1.2s infinite ease-in-out}
 .thinking i:nth-child(2){animation-delay:.15s}.thinking i:nth-child(3){animation-delay:.3s}
@@ -127,7 +130,7 @@ body{height:100vh;height:100dvh;overflow:hidden}
         <button class="rail-toggle" id="rail-toggle" aria-label="Open briefs" aria-controls="rail" aria-expanded="false">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
         </button>
-        <span class="status" id="status"><span class="led"></span><span id="status-text">Preview mode</span></span>
+        <button type="button" class="status" id="status"><span class="led"></span><span id="status-text">Preview mode</span></button>
       </div>
       <span class="badge-exec">Black Edition</span>
     </header>

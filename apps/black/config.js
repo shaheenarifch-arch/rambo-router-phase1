@@ -1,8 +1,7 @@
 /*
  * BLACK Edition runtime config.
- * apiBase: URL of the RAMBO gateway proxy that serves POST /v1/responses.
- *          Leave empty to run the console in Preview mode (no live answers).
- *          Never put a RAMBO API key here — the proxy adds it server-side.
+ * apiBase: where the gateway lives. Empty = same origin (functions/v1/responses.js on this
+ *          Cloudflare Pages project). Never put API keys here — they are Cloudflare secrets.
  * studioUrl: where "Back to Studio" points.
  */
 window.BLACK_CONFIG = {
