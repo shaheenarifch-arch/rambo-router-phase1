@@ -192,6 +192,7 @@
     if (status === 401 || status === 403) { LIVE = false; setStatus(); return "Your access code wasn't accepted. Tap the status badge at the top to enter it again."; }
     if (status === 413) return "That brief is too long. Shorten it or start a new brief.";
     if (status === 502) return "Every engine failed to answer this time. Try again in a moment.";
+    if (status === 424) return "Every engine failed to answer. " + ((j && j.engines) || []).map(function (f) { return f.engine + ": " + f.error; }).join(" · ");
     if (status === 429) return "You're sending briefs quickly. Wait a moment and try again.";
     if (status === 503) return "No intelligence engine is available right now. Try again shortly.";
     return "The gateway returned " + status + (j && j.error ? " (" + j.error + ")" : "") + ".";
