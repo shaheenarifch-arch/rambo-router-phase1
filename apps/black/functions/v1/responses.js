@@ -97,20 +97,21 @@ export async function onRequestPost({ request, env }) {
 
   try {
     if (mode === "executive" && order.length >= 2) {
-      return json(await executive({ env, order, messages, taskType, requestId, started }));
+      const ex = await executive({ env, order, messages, taskType, requestId, started });
+      return ex.failures ? allFailed(ex.failures) : json(ex);
     }
     // Single answer with ordered fallback.
     const reasons = [REASON[taskType], "MODE_" + mode.toUpperCase()];
     if (mode === "executive") reasons.push("EXECUTIVE_NEEDS_TWO_ENGINES");
-    let lastErr;
+    const failures = [];
     for (let i = 0; i < order.length; i++) {
       try {
         const r = await call(order[i], env, tier, messages);
         if (i > 0) reasons.push("FALLBACK_FROM_" + order[0].toUpperCase());
         return json(shape({ requestId, mode, started, provider: order[i], model: r.model, text: r.text, reasons, fallbackUsed: i > 0, usage: r.usage }));
-      } catch (e) { lastErr = e; }
+      } catch (e) { failures.push(failure(order[i], e)); }
     }
-    return json({ error: "ALL_ENGINES_FAILED", detail: String(lastErr && lastErr.message || lastErr).slice(0, 200) }, 502);
+    return allFailed(failures);
   } catch (e) {
     return json({ error: "INTERNAL_ERROR" }, 500);
   }
@@ -121,8 +122,12 @@ async function executive({ env, order, messages, taskType, requestId, started })
   const panel = order.slice(0, 3);
   const settled = await Promise.allSettled(panel.map((e) => call(e, env, "deep", messages)));
   const candidates = [];
-  settled.forEach((s, i) => { if (s.status === "fulfilled") candidates.push({ provider: panel[i], model: s.value.model, text: s.value.text }); });
-  if (!candidates.length) throw new Error("EXECUTIVE_ALL_FAILED");
+  const failures = [];
+  settled.forEach((s, i) => {
+    if (s.status === "fulfilled") candidates.push({ provider: panel[i], model: s.value.model, text: s.value.text });
+    else failures.push(failure(panel[i], s.reason));
+  });
+  if (!candidates.length) return { failures };
   if (candidates.length === 1) {
     const c = candidates[0];
     return shape({ requestId, mode: "executive", started, provider: c.provider, model: c.model, text: c.text, reasons: [REASON[taskType], "EXECUTIVE_ONLY_ONE_ENGINE_ANSWERED"], fallbackUsed: true, executive: { candidates: candidates.map(cand), disagreements: [] } });
@@ -206,12 +211,26 @@ async function post(url, headers, payload) {
   try {
     const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(payload), signal: ctl.signal });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(`${new URL(url).host} ${r.status}`);
+    if (!r.ok) {
+      const e = j && j.error;
+      const msg = typeof e === "string" ? e : (e && e.message) || (j && j.message) || r.statusText || "";
+      throw new Error(`${r.status} ${String(msg)}`.trim());
+    }
     return j;
   } finally { clearTimeout(t); }
 }
 
 // ---------- helpers ----------
+// Per-engine failure detail: provider label, HTTP status and the provider's error message. Never includes keys.
+function failure(provider, e) {
+  const m = e && e.name === "AbortError" ? "timeout" : String((e && e.message) || e || "unknown");
+  // Some providers echo a masked key in the message; strip anything key-shaped.
+  return { engine: LABEL[provider] || provider, error: m.replace(/\b(sk|xai|pplx|AIza)[\w*.-]{4,}/g, "[key]").slice(0, 200) };
+}
+// 424, not 502: Cloudflare replaces 502 bodies with its own error page, which hid this detail.
+function allFailed(failures) {
+  return json({ error: "ALL_ENGINES_FAILED", engines: failures }, 424);
+}
 function engines(env) {
   return ["anthropic", "openai", "gemini", "perplexity", "xai"].filter((e) => env[e.toUpperCase() + "_API_KEY"]);
 }
