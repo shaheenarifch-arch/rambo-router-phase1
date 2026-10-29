@@ -209,9 +209,10 @@ function model(env, provider, tier) {
 async function call(provider, env, tier, messages, sys = SYSTEM) {
   const m = model(env, provider, tier);
   if (provider === "anthropic") {
-    const j = await post("https://api.anthropic.com/v1/messages", {
-      "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01"
-    }, { model: m, max_tokens: 4096, system: sys, messages, ...claudeSpeed(m, tier) });
+    const h = { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" }, base = { model: m, max_tokens: 4096, system: sys, messages };
+    const fast = claudeSpeed(m, tier);
+    const j = await post("https://api.anthropic.com/v1/messages", h, { ...base, ...fast })
+      .catch((e) => (Object.keys(fast).length && /^400\b/.test(String(e.message)) ? post("https://api.anthropic.com/v1/messages", h, base) : Promise.reject(e)));
     return { model: j.model || m, text: (j.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n"), usage: { inputTokens: j.usage?.input_tokens, outputTokens: j.usage?.output_tokens } };
   }
   if (provider === "openai") {
@@ -471,7 +472,12 @@ async function stream(provider, env, tier, messages, { onDelta, timeoutMs, syste
       };
     } else throw new Error("UNKNOWN_PROVIDER");
 
-    const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(payload), signal: ctl.signal });
+    let r = await fetch(url, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(payload), signal: ctl.signal });
+    if (r.status === 400 && (payload.thinking || payload.output_config)) {
+      // Safety net: a model that rejects the speed settings is retried once without them.
+      delete payload.thinking; delete payload.output_config;
+      r = await fetch(url, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(payload), signal: ctl.signal });
+    }
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
       const e = j && (Array.isArray(j) ? j[0] && j[0].error : j.error);
