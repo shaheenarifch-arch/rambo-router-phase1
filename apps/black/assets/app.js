@@ -149,7 +149,9 @@
     if (!text) text = "Analyze this spreadsheet: the key totals, trends and anything that needs my attention.";
     var cal = !att && window.BLACK_CAL;
     var scheduling = cal && window.BLACK_CAL.isScheduling(text);
-    var calQuestion = cal && !scheduling && window.BLACK_CAL.signedIn() && window.BLACK_CAL.isCalendarQuestion(text);
+    var calAsk = cal && !scheduling && window.BLACK_CAL.isCalendarQuestion(text);
+    var calMissing = calAsk && !(window.BLACK_CAL.hasCalendar && window.BLACK_CAL.hasCalendar());
+    var calQuestion = calAsk && !calMissing && window.BLACK_CAL.signedIn();
     if (!current) {
       current = { id: String(Date.now()), title: (att && !el.prompt.value.trim() ? att.name : text).slice(0, 60), mode: mode, messages: [] };
       briefs.unshift(current);
@@ -170,6 +172,15 @@
       window.BLACK_CAL.propose(text, function (summary) {
         if (!summary) return;
         current.messages.push({ role: "assistant", content: summary, meta: { mode: "calendar", reasons: ["BLACK_CALENDAR"] } });
+        save();
+      });
+      return;
+    }
+    // Calendar question but no calendar connected -> connect / upload card, no engine report.
+    if (calMissing && window.BLACK_CAL.connectCard) {
+      onInput();
+      window.BLACK_CAL.connectCard(function (summary) {
+        current.messages.push({ role: "assistant", content: summary, meta: { mode: "calendar", reasons: ["BLACK_CALENDAR_NOT_CONNECTED"] } });
         save();
       });
       return;
