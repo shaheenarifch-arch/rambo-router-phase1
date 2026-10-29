@@ -26,6 +26,7 @@ Static front end for BLACK™, the dark-and-gold executive edition of GetService
 - **Executive** mode runs up to three engines in parallel. Claude merges their answers and flags where they disagree.
 - **Live stream:** POST with `"stream": true` returns Server-Sent Events (`route`, `engine`, `delta`, `switch`, `synth`, `done`, `error`) so the console shows each engine working, model switches and text as it is written.
 - Each engine gets 45s in a live brief. A slow engine is skipped (or kept as a partial answer) instead of failing the brief. Empty answers are dropped before synthesis.
+- **Fast** and **Smart** give quick answers (under ~120 words) with key data, one inline chart when numbers matter, and up to 3 source links. **Full report →** re-runs the brief in Deep mode. Deep and Executive stay detailed.
 - Synthesis uses the Smart model tier for speed. Set `SYNTH_TIER=deep` to use the Deep tier.
 - Add these secrets in Cloudflare (Pages > black-edition > Settings > Variables and secrets). Any engine without a key is skipped.
   - `BLACK_ACCESS_CODE` (required)

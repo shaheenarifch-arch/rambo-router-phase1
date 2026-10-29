@@ -395,6 +395,7 @@
     if (typeof meta.cost === "number") chip(trail, "Cost", "$" + meta.cost.toFixed(4));
     if (meta.reasons && meta.reasons.length) chip(trail, "Why", meta.reasons.join(", "));
     if (meta.timeline) meta.timeline.forEach(function (t) {
+      if (t.status === "skipped" || t.status === "queued") return;
       var mark = t.status === "done" ? (t.partial ? "◐" : "✓") : t.status === "failed" ? "✕" : "–";
       chip(trail, mark + " " + t.label, (t.model ? t.model + " · " : "") + (typeof t.ms === "number" ? (t.ms / 1000).toFixed(1) + "s" : STATUS[t.status] || t.status) + (t.error ? " · " + t.error : ""), t.status === "failed");
     });
@@ -412,6 +413,17 @@
       });
       a.appendChild(det);
     }
+    if (!meta.preview && (meta.mode === "fast" || meta.mode === "smart")) {
+      var fr = document.createElement("button"); fr.type = "button"; fr.className = "btn btn-ghost btn-sm full-report"; fr.textContent = "Full report →";
+      fr.title = "Re-run this brief in Deep mode for a detailed report with data and sources";
+      fr.addEventListener("click", function () {
+        if (busy) return;
+        setMode("deep");
+        el.prompt.value = "Give me the full report on this: sections, key data, a chart if useful, risks, next steps and sources.";
+        onInput(); el.form.requestSubmit();
+      });
+      a.appendChild(fr);
+    }
     d.appendChild(a); el.thread.appendChild(d);
   }
   function chip(parent, k, v, warn) {
@@ -425,12 +437,42 @@
   // Minimal, safe markdown: escape first, then format headings, bold, inline code, code blocks, lists, paragraphs.
   function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
   function inline(s) {
-    return s.replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    return s.replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)"]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+      .replace(/(^|[\s(])(https?:\/\/[^\s<)"]+)/g, '$1<a href="$2" target="_blank" rel="noopener noreferrer">$2</a>');
+  }
+  // ```chart {"type":"bar"|"line","title","labels":[],"values":[]}``` -> small inline gold SVG chart.
+  function chartSvg(src) {
+    var j; try { j = JSON.parse(src.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&")); } catch (e) { return null; }
+    var vals = (j.values || []).map(Number).filter(function (v) { return isFinite(v); }).slice(0, 10);
+    if (vals.length < 2) return null;
+    var labels = (j.labels || []).slice(0, vals.length).map(function (l) { return esc(String(l)).slice(0, 14); });
+    var W = 320, H = 140, P = 22, max = Math.max.apply(null, vals.concat(0)), min = Math.min.apply(null, vals.concat(0)), span = (max - min) || 1;
+    var y = function (v) { return (H - P - (v - min) / span * (H - P * 2)).toFixed(1); };
+    var step = (W - P * 2) / vals.length, marks = "";
+    if (j.type === "line") {
+      var pts = vals.map(function (v, i) { return (P + step * (i + 0.5)).toFixed(1) + "," + y(v); }).join(" ");
+      marks = '<polyline points="' + pts + '" fill="none" stroke="#e3c46b" stroke-width="2.5"/>' +
+        vals.map(function (v, i) { return '<circle cx="' + (P + step * (i + 0.5)).toFixed(1) + '" cy="' + y(v) + '" r="3" fill="#e3c46b"/>'; }).join("");
+    } else {
+      marks = vals.map(function (v, i) {
+        var top = y(Math.max(v, 0)), bot = y(Math.min(v, 0));
+        return '<rect x="' + (P + step * i + step * 0.18).toFixed(1) + '" y="' + top + '" width="' + (step * 0.64).toFixed(1) + '" height="' + Math.max(1, bot - top).toFixed(1) + '" rx="3" fill="url(#bk-chart-g)"/>';
+      }).join("");
+    }
+    var vlabels = vals.map(function (v, i) { return '<text x="' + (P + step * (i + 0.5)).toFixed(1) + '" y="' + (y(Math.max(v, 0)) - 5) + '" text-anchor="middle" font-size="9" fill="#cfcabf">' + (Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + "k" : +v.toFixed(2)) + "</text>"; }).join("");
+    var xl = labels.map(function (l, i) { return '<text x="' + (P + step * (i + 0.5)).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle" font-size="9" fill="#6f6b63">' + l + "</text>"; }).join("");
+    return '<figure class="chart"><figcaption>' + esc(String(j.title || "")).slice(0, 80) + '</figcaption><svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(String(j.title || "chart")) + '">' +
+      '<defs><linearGradient id="bk-chart-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6e19a"/><stop offset="1" stop-color="#b8902f"/></linearGradient></defs>' +
+      '<line x1="' + P + '" y1="' + y(0) + '" x2="' + (W - P) + '" y2="' + y(0) + '" stroke="rgba(255,255,255,.12)"/>' + marks + vlabels + xl + "</svg></figure>";
   }
   function md(src) {
     var out = [], blocks = esc(src || "").split(/```/);
     blocks.forEach(function (chunk, i) {
-      if (i % 2) { out.push("<pre><code>" + chunk.replace(/^\w*\n/, "") + "</code></pre>"); return; }
+      if (i % 2) {
+        var c = /^chart\s*\n/.test(chunk) ? chartSvg(chunk.replace(/^chart\s*\n/, "")) : null;
+        out.push(c || "<pre><code>" + chunk.replace(/^\w*\n/, "") + "</code></pre>"); return;
+      }
       var list = null;
       chunk.split("\n").forEach(function (line) {
         var t = line.trim();
