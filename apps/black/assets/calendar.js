@@ -209,7 +209,25 @@
   var SCHED = /\b(schedule|book|set ?up|arrange|plan|add|put)\b[^.?!]*\b(meeting|call|sync|review|lunch|dinner|coffee|appointment|interview|stand-?up|1:1|one-on-one|catch-?up|session|demo)\b|^(schedule|book|reschedule)\b|\b(reschedule|move|push|cancel|delete)\b[^.?!]*\b(meeting|call|sync|review|appointment|interview|1:1|catch-?up|session|demo)\b/i;
   var ASK = /\b(what'?s|what is|anything) on (my|the)?\s*(calendar|schedule|agenda|plate)?\b|\bmy (calendar|schedule|agenda|day|week|meetings)\b|\bam i (free|busy|available)\b|\b(free|open) (time|slots?)\b|\bwhen am i free\b|\bmeetings? (today|tomorrow|this week|next week)\b/i;
   function isScheduling(t) { return SCHED.test(t); }
-  function isCalendarQuestion(t) { return !SCHED.test(t) && ASK.test(t); }
+  var ASK2 = /\b(meetings?|calendar|schedule|agenda|appointments?)\b[^.?!]{0,30}\b(today|tonight|tomorrow|this week|next week|this month|next month)\b/i;
+  function isCalendarQuestion(t) { return !SCHED.test(t) && (ASK.test(t) || ASK2.test(t)); }
+  // True once BLACK has something to read: a linked calendar or BLACK meetings of its own.
+  function hasCalendar() { return !!token && !!info && !!info.configured && (!!info.linked || !!(cache && cache.events && cache.events.length)); }
+
+  // Calendar question with no calendar to read: ask to connect or upload instead of a full engine report.
+  function connectCard(done) {
+    var d = cardShell("Calendar"), box = d.querySelector(".cal-in");
+    box.innerHTML = "<p>BLACK can\u2019t see your calendar yet. Connect your calendar, or upload a calendar file with the \ud83d\udcce paperclip, to see your meetings.</p>" +
+      '<div class="cal-acts"><button type="button" class="btn btn-gold btn-sm" data-connect>Connect calendar</button>' +
+      '<button type="button" class="btn btn-ghost btn-sm" data-upload>\ud83d\udcce Upload calendar file</button></div>';
+    box.querySelector("[data-connect]").addEventListener("click", function () {
+      if (token) return openDrawer();
+      pendingAfterSignIn = function () { openDrawer(); };
+      openSignIn("Sign in to connect your calendar.");
+    });
+    box.querySelector("[data-upload]").addEventListener("click", function () { var b = document.getElementById("attach-btn"); if (b) { b.focus(); b.click(); } });
+    done && done("BLACK can\u2019t see your calendar yet. Connect your calendar or upload a calendar file to see your meetings.");
+  }
 
   // Compact view of the next 14 days for calendar questions.
   function contextBlock() {
@@ -326,6 +344,7 @@
 
   window.BLACK_CAL = {
     isScheduling: isScheduling, isCalendarQuestion: isCalendarQuestion, propose: propose, contextBlock: contextBlock,
+    hasCalendar: hasCalendar, connectCard: connectCard,
     signedIn: function () { return !!token; }, openSignIn: openSignIn, openDrawer: openDrawer,
     onChange: function (f) { listeners.push(f); }
   };
