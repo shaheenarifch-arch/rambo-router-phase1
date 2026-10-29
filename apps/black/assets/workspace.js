@@ -97,59 +97,34 @@
   var TODAY = new Date().toLocaleDateString([], { month: "short", day: "numeric" });
   var SLIDES = [
     { id: "overview", doc: "Morning Brief \u00b7 " + TODAY, k: "Executive Summary", h: "Net Worth Today", t: "Net worth", tasks: [["Gemini", "Consolidating 9 accounts"], ["GPT", "Computing today's P&L"], ["Claude", "Writing your morning summary"]] },
-    { id: "stocks", doc: "Equities \u00b7 " + TODAY, k: "Market Positions", h: "Stocks", t: "Stocks", tasks: [["RAMBO", "Connecting market feed"], ["GPT", "Valuing 4 positions"], ["Grok", "Scanning price signals"]] },
+    { id: "stocks", doc: "Equities \u00b7 " + TODAY, k: "Market Positions", h: "Stocks", t: "Portfolio", tasks: [["RAMBO", "Connecting market feed"], ["GPT", "Valuing 4 positions"], ["Grok", "Scanning price signals"]] },
     { id: "crypto", doc: "Digital Assets \u00b7 " + TODAY, k: "Wallets & Exchanges", h: "Crypto", t: "Crypto", tasks: [["RAMBO", "Syncing exchange and cold vault"], ["Gemini", "Reconciling 3 wallets"], ["Grok", "Watching volatility"]] },
-    { id: "strategic", doc: "Strategic Portfolio \u00b7 FY27", k: "Strategic Portfolio", h: "Initiative Scorecard", t: "Strategic portfolio", tasks: [["Claude", "Mapping initiatives to strategy"], ["GPT", "Scoring value against spend"], ["Gemini", "Flagging risks"]] },
-    { id: "alloc", doc: "Allocation Review \u00b7 " + TODAY, k: "Portfolio Allocation", h: "Target vs Actual", t: "Allocation vs target", tasks: [["GPT", "Measuring drift from targets"], ["Claude", "Drafting rebalance options"]] },
-    { id: "assets", doc: "Asset Register \u00b7 Q3", k: "Hard & Private Assets", h: "Asset Register", t: "Assets", tasks: [["Gemini", "Reading valuations and appraisals"], ["Perplexity", "Checking market comparables"]] },
-    { id: "today", doc: "Today \u00b7 " + TODAY, k: "Meetings & Statements", h: "Your Day", t: "Meetings & statements", tasks: [["Claude", "Preparing meeting briefs"], ["Gemini", "Parsing statements"], ["RAMBO", "Filing documents"]] },
-    { id: "activity", doc: "Agent Activity \u00b7 Live", k: "Live Activity", h: "Agents at Work", t: "Live activity", tasks: [["RAMBO", "Streaming agent activity"]] }
+    { id: "today", doc: "Today \u00b7 " + TODAY, k: "Meetings & Statements", h: "Your Day", t: "Your day", tasks: [["Claude", "Preparing meeting briefs"], ["Gemini", "Parsing statements"], ["RAMBO", "Filing documents"]] },
+    { id: "activity", doc: "Agent Activity \u00b7 Live", k: "Live Activity", h: "Agents at Work", t: "Activity", tasks: [["RAMBO", "Streaming agent activity"]] }
   ];
   var cur = 0, phase = "build", stepN = 0, holdTicks = 0, paused = false, userPaused = false, hidden = false, t0 = Date.now(), n = 0;
   var TICK = 250, STEP_TICKS = 3, HOLD_TICKS = 28; // 0.75s per agent step, ~7s live per slide
-  var DESK = "<svg viewBox=\"0 0 440 250\" width=\"100%\" focusable=\"false\"><defs><linearGradient id=\"wsd-g\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0\" stop-color=\"#fff4c8\"/><stop offset=\".45\" stop-color=\"#e3c46b\"/><stop offset=\"1\" stop-color=\"#9a7414\"/></linearGradient><linearGradient id=\"wsd-l\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0\" stop-color=\"#2a221a\"/><stop offset=\"1\" stop-color=\"#0c0a08\"/></linearGradient><linearGradient id=\"wsd-p\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#3a3a3c\"/><stop offset=\".45\" stop-color=\"#0b0b0c\"/><stop offset=\"1\" stop-color=\"#000\"/></linearGradient><radialGradient id=\"wsd-glow\" cx=\".55\" cy=\".5\" r=\".6\"><stop offset=\"0\" stop-color=\"rgba(227,196,107,.16)\"/><stop offset=\"1\" stop-color=\"rgba(227,196,107,0)\"/></radialGradient></defs><ellipse cx=\"220\" cy=\"130\" rx=\"200\" ry=\"110\" fill=\"url(#wsd-glow)\"/><g opacity=\".45\" fill=\"#000\"><rect x=\"16\" y=\"30\" width=\"196\" height=\"138\" rx=\"16\"/><rect x=\"190\" y=\"66\" width=\"182\" height=\"138\" rx=\"8\"/></g><g><rect x=\"8\" y=\"22\" width=\"196\" height=\"138\" rx=\"16\" fill=\"url(#wsd-l)\" stroke=\"#5a4520\"/><rect x=\"18\" y=\"32\" width=\"176\" height=\"118\" rx=\"11\" fill=\"none\" stroke=\"#e3c46b\" stroke-opacity=\".35\" stroke-dasharray=\"3 4\"/><path d=\"M76 22 V10 a8 8 0 0 1 8-8 h44 a8 8 0 0 1 8 8 V22\" fill=\"none\" stroke=\"#3b2f22\" stroke-width=\"7\"/><rect x=\"8\" y=\"98\" width=\"196\" height=\"3\" fill=\"#000\" opacity=\".5\"/><rect x=\"44\" y=\"92\" width=\"18\" height=\"16\" rx=\"3\" fill=\"url(#wsd-g)\"/><rect x=\"150\" y=\"92\" width=\"18\" height=\"16\" rx=\"3\" fill=\"url(#wsd-g)\"/></g><g><rect x=\"182\" y=\"58\" width=\"182\" height=\"138\" rx=\"8\" fill=\"#0f0e0d\" stroke=\"#2a2620\"/><rect x=\"182\" y=\"58\" width=\"16\" height=\"138\" rx=\"6\" fill=\"#070707\"/><rect x=\"340\" y=\"58\" width=\"6\" height=\"138\" fill=\"#1c1916\"/><path d=\"M300 196 v30 l7-6 7 6 v-30\" fill=\"#9a7414\"/><text x=\"262\" y=\"92\" text-anchor=\"middle\" fill=\"url(#wsd-g)\" font-family=\"Space Grotesk,sans-serif\" font-size=\"12\" font-weight=\"700\" letter-spacing=\"5\">BLACK</text><rect x=\"227\" y=\"100\" width=\"72\" height=\"1\" fill=\"#e3c46b\" opacity=\".4\"/></g><g transform=\"rotate(-24 300 140)\"><rect x=\"196\" y=\"146\" width=\"210\" height=\"12\" rx=\"6\" fill=\"#000\" opacity=\".5\"/><path d=\"M188 140 l-16 6 16 6 z\" fill=\"url(#wsd-g)\"/><rect x=\"188\" y=\"136\" width=\"18\" height=\"14\" rx=\"3\" fill=\"#111\"/><rect x=\"206\" y=\"134\" width=\"196\" height=\"18\" rx=\"9\" fill=\"url(#wsd-p)\"/><rect x=\"290\" y=\"134\" width=\"4\" height=\"18\" fill=\"url(#wsd-g)\"/><rect x=\"300\" y=\"134\" width=\"2\" height=\"18\" fill=\"url(#wsd-g)\" opacity=\".7\"/><rect x=\"306\" y=\"130\" width=\"84\" height=\"5\" rx=\"2.5\" fill=\"url(#wsd-g)\"/><circle cx=\"390\" cy=\"132.5\" r=\"4\" fill=\"url(#wsd-g)\"/><rect x=\"398\" y=\"136\" width=\"6\" height=\"14\" rx=\"3\" fill=\"url(#wsd-g)\"/><rect class=\"wsd-shine\" x=\"210\" y=\"137\" width=\"40\" height=\"3\" rx=\"1.5\" fill=\"#fff\" opacity=\".22\"/></g><g transform=\"translate(70 196) rotate(-8)\" fill=\"none\" stroke=\"url(#wsd-g)\" stroke-width=\"2.6\"><ellipse cx=\"0\" cy=\"0\" rx=\"28\" ry=\"21\" fill=\"rgba(255,255,255,.04)\"/><ellipse cx=\"72\" cy=\"0\" rx=\"28\" ry=\"21\" fill=\"rgba(255,255,255,.04)\"/><path d=\"M28 -4 q8 -8 16 0\"/><path d=\"M-28 -6 l-6 26 q-2 10 8 12 l58 6\"/><path d=\"M100 -6 l6 26 q2 10 -8 12 l-48 4\" opacity=\".85\"/><path d=\"M-12 -12 q6 -4 12 -2\" stroke=\"#fff\" stroke-opacity=\".35\" stroke-width=\"2\"/><path d=\"M60 -12 q6 -4 12 -2\" stroke=\"#fff\" stroke-opacity=\".35\" stroke-width=\"2\"/></g></svg>";
 
   root.innerHTML =
     '<div class="ws-top">' +
-      '<div><span class="ws-kicker">Command Workspace</span><span class="ws-demo">Demo data</span></div>' +
-      '<span class="ws-ctrl"><button type="button" id="ws-prev" aria-label="Previous">‹</button><button type="button" id="ws-play" aria-label="Pause slides">❚❚</button><button type="button" id="ws-next" aria-label="Next">›</button></span>' +
-    "</div>" +
-    '<div class="ws-tabs" role="tablist" aria-label="Workspace views" id="ws-tabs">' +
-      SLIDES.map(function (x, i) { return '<button role="tab" type="button" data-i="' + i + '">' + esc(x.t) + "</button>"; }).join("") +
+      '<span class="ws-kicker">Command Workspace</span>' +
+      '<div class="ws-tabs" role="tablist" aria-label="Workspace views" id="ws-tabs">' +
+        SLIDES.map(function (x, i) { return '<button role="tab" type="button" data-i="' + i + '">' + esc(x.t) + "</button>"; }).join("") +
+      "</div>" +
+      '<button type="button" class="ws-play" id="ws-play" aria-label="Pause slides">❚❚</button>' +
     "</div>" +
     '<div class="ws-kpis" id="ws-kpis"></div>' +
-    '<div class="ws-stage">' +
-      '<div class="ws-left">' +
-        '<div class="ws-agent" id="ws-agent">' +
-          '<div class="ws-agent-head"><span class="ws-pulse"></span>RAMBO<span class="ws-clock" id="ws-clock">LIVE</span></div>' +
-          '<div class="ws-agent-title" id="ws-job"></div><div class="ws-agent-sub" id="ws-sub"></div>' +
-          '<ol class="ws-tasks" id="ws-tasks"></ol>' +
-        "</div>" +
-        '<figure class="ws-desk" aria-hidden="true">' + DESK + "</figure>" +
-      "</div>" +
-      '<div class="ws-doc">' +
-        '<div class="ws-doc-bar">Your executive output · <strong id="ws-doc-t"></strong></div>' +
-        '<div class="ws-doc-body">' +
-          '<div class="ws-rail" id="ws-rail"></div>' +
-          '<div class="ws-doc-main">' +
-            '<div class="ws-cover"><span class="ws-cover-k" id="ws-cover-k"></span><span class="ws-cover-h gold-text" id="ws-cover-h"></span>' +
-              '<div class="ws-slide" id="ws-slide" aria-live="polite"></div><span class="ws-cover-f">BLACK · Routed by RAMBO</span></div>' +
-            '<div class="ws-notes"><span id="ws-stamp">Routing trail</span><b id="ws-trail"></b></div>' +
-          "</div>" +
-        "</div>" +
-      "</div>" +
+    '<div class="ws-cover">' +
+      '<div class="ws-status" id="ws-agent"><span class="ws-pulse"></span><b>RAMBO</b><span class="ws-job" id="ws-job"></span><span class="ws-sub" id="ws-sub"></span><span class="ws-clock" id="ws-clock">LIVE</span></div>' +
+      '<span class="ws-cover-k" id="ws-cover-k"></span><span class="ws-cover-h gold-text" id="ws-cover-h"></span>' +
+      '<div class="ws-slide" id="ws-slide" aria-live="polite"></div>' +
     "</div>" +
     '<div class="ws-upload" role="status"><span class="ws-info" aria-hidden="true">i</span><span><b>You\u2019re seeing test data.</b> Upload your files (Excel or CSV: statements, portfolios, holdings) with the \ud83d\udcce paperclip to see your real-time data.</span>' +
       '<button type="button" id="ws-upload-btn">\ud83d\udcce Upload files</button></div>';
 
   var $ = function (id) { return document.getElementById(id); };
   $("ws-upload-btn").addEventListener("click", function () { var b = document.getElementById("attach-btn"); if (b) { b.focus(); b.click(); } });
-  $("ws-rail").innerHTML = SLIDES.map(function (x, i) { return '<button type="button" data-i="' + i + '"><span>' + esc(x.t) + "</span></button>"; }).join("");
-  [$("ws-tabs"), $("ws-rail")].forEach(function (box) {
-    box.addEventListener("click", function (e) { var b = e.target.closest("button"); if (b) go(+b.dataset.i); });
-  });
-  $("ws-prev").addEventListener("click", function () { go((cur - 1 + SLIDES.length) % SLIDES.length); });
-  $("ws-next").addEventListener("click", function () { go((cur + 1) % SLIDES.length); });
+  $("ws-tabs").addEventListener("click", function (e) { var b = e.target.closest("button"); if (b) go(+b.dataset.i); });
   $("ws-play").addEventListener("click", function () {
     userPaused = !userPaused;
     $("ws-play").textContent = userPaused ? "▶" : "❚❚";
@@ -228,10 +203,12 @@
     $("ws-slide").innerHTML = html;
   }
 
+  // One-line agent status: the step being worked on, or the routing trail once built.
   function tasksHtml(k) {
-    return SLIDES[cur].tasks.map(function (x, i) {
-      return '<li class="' + (phase !== "build" || i < k ? "done" : i === k ? "on" : "") + '"><span><b>' + x[0] + "</b> · " + x[1] + "</span></li>";
-    }).join("");
+    var t = SLIDES[cur].tasks;
+    if (phase !== "build") return trail();
+    var x = t[Math.min(k, t.length - 1)];
+    return x[0] + " \u00b7 " + x[1];
   }
   function trail() {
     var seen = {}, out = [];
@@ -243,29 +220,21 @@
     cur = i; phase = still ? "live" : "build"; stepN = 0; holdTicks = 0; t0 = Date.now();
     var s = SLIDES[cur];
     $("ws-tabs").querySelectorAll("button").forEach(function (b, j) { b.setAttribute("aria-selected", String(j === cur)); });
-    $("ws-rail").querySelectorAll("button").forEach(function (b, j) { b.classList.toggle("hl", j === cur); });
-    var tb = $("ws-tabs").children[cur];
-    if (tb && tb.scrollIntoView && root.offsetParent) $("ws-tabs").scrollLeft = tb.offsetLeft - 16;
-    $("ws-doc-t").textContent = s.doc;
-    $("ws-cover-k").textContent = s.k;
+    $("ws-cover-k").textContent = s.doc;
     $("ws-cover-h").textContent = s.h;
-    $("ws-job").textContent = "Building your " + s.t;
-    $("ws-trail").textContent = trail();
-    $("ws-stamp").textContent = "Routing trail";
-    $("ws-sub").textContent = phase === "build" ? "Agents working…" : "Live";
+    $("ws-job").textContent = (phase === "build" ? "Building your " : "Your ") + s.t.toLowerCase();
     var sl = $("ws-slide"); sl.classList.remove("enter"); void sl.offsetWidth; sl.classList.add("enter");
     root.classList.toggle("working", phase === "build");
     root.classList.toggle("built", phase !== "build");
     root.classList.toggle("alert", s.id === "alloc" || s.id === "crypto");
-    $("ws-tasks").innerHTML = tasksHtml(0);
+    $("ws-sub").textContent = tasksHtml(0);
     render(0); kpis();
   }
 
   function tick() {
     if (paused || hidden) return;
     n++;
-    $("ws-clock").textContent = "LIVE · " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
-    if (phase === "build") $("ws-sub").textContent = "Agents working… " + ((Date.now() - t0) / 1000).toFixed(1) + "s";
+    $("ws-clock").textContent = phase === "build" ? ((Date.now() - t0) / 1000).toFixed(1) + "s" : "LIVE";
     var second = n % 4 === 0;
     if (second) {
       // markets always move
@@ -281,13 +250,13 @@
     if (phase === "build") {
       if (n % STEP_TICKS) return;
       stepN++;
-      $("ws-tasks").innerHTML = tasksHtml(stepN);
       if (stepN >= SLIDES[cur].tasks.length) {
         phase = "live";
         root.classList.remove("working"); root.classList.add("built");
-        $("ws-sub").textContent = "Completed in " + ((Date.now() - t0) / 1000).toFixed(1) + "s";
-        $("ws-stamp").textContent = "Generated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
+        $("ws-job").textContent = "Your " + SLIDES[cur].t.toLowerCase();
+        $("ws-clock").textContent = "LIVE";
       }
+      $("ws-sub").textContent = tasksHtml(stepN);
       render(phase === "build" ? stepN * 2 : 99); kpis();
       return;
     }
