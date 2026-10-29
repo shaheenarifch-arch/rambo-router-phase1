@@ -479,6 +479,7 @@
       });
       a.appendChild(det);
     }
+    collapse(a);
     if (!meta.preview && (meta.mode === "fast" || meta.mode === "smart")) {
       var fr = document.createElement("button"); fr.type = "button"; fr.className = "btn btn-ghost btn-sm full-report"; fr.textContent = "Full report →";
       fr.title = "Re-run this brief in Deep mode for a detailed report with data and sources";
@@ -492,6 +493,24 @@
     }
     d.appendChild(a); el.thread.appendChild(d);
     return d;
+  }
+  // Highlight the key answer (data cards + first paragraph); everything else goes under "Details".
+  function collapse(a) {
+    var body = a.querySelector(".body"), kids = Array.prototype.slice.call(body.children);
+    var lead = kids.filter(function (k) { return k.tagName === "P"; })[0];
+    if (lead) lead.classList.add("lead");
+    var rest = kids.filter(function (k) { return k !== lead && !k.classList.contains("kpis"); });
+    var trail = a.querySelector(".trail"), cands = a.querySelector(".cands");
+    if (!rest.length && !trail.children.length && !cands) return;
+    var more = document.createElement("details"); more.className = "more";
+    var n = rest.length;
+    more.innerHTML = "<summary>Details" + (n ? " · " + n + " more section" + (n > 1 ? "s" : "") : "") + "</summary>";
+    var box = document.createElement("div"); box.className = "body more-body";
+    rest.forEach(function (k) { box.appendChild(k); });
+    more.appendChild(box);
+    if (trail.children.length) more.appendChild(trail);
+    if (cands) more.appendChild(cands);
+    a.appendChild(more);
   }
   function chip(parent, k, v, warn) {
     var s = document.createElement("span"); s.className = "chip" + (warn ? " warn" : "");
