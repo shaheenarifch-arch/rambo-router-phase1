@@ -152,7 +152,9 @@
     var pending = addPending();
     var started = performance.now();
     var job = LIVE ? callRambo(taskType, pending) : preview(current.messages[current.messages.length - 1].content, taskType);
+    var stick = true;
     job.then(function (res) {
+      stick = nearBottom();
       pending.remove();
       res.meta.latencyMs = res.meta.latencyMs || Math.round(performance.now() - started);
       addAnswer(res.meta, res.content);
@@ -161,7 +163,7 @@
     }).catch(function (err) {
       pending.remove();
       addError(err && err.message ? err.message : "Something went wrong.", function () { dispatch(taskType); });
-    }).finally(function () { busy = false; onInput(); scrollEnd(); el.prompt.focus(); });
+    }).finally(function () { busy = false; onInput(); if (stick) scrollEnd(); el.prompt.focus({ preventScroll: true }); });
   }
 
   function callRambo(taskType, card) {
@@ -336,7 +338,7 @@
       $q(".cand-tabs").querySelectorAll("button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.k === active)); });
       if (active) $q(".cand-view").innerHTML = md(texts[active] || "") + (rows[active] && rows[active].status === "writing" ? '<span class="caret"></span>' : "");
       if (finalText) $q(".final").innerHTML = md(finalText) + '<span class="caret"></span>';
-      scrollEnd();
+      follow();
     }
     function later() { if (!renderT) renderT = setTimeout(paint, 120); }
     return {
@@ -349,9 +351,18 @@
           var many = x.engines.length > 1 && x.mode === "executive";
           $q(".rline").textContent = (x.mode === "executive" ? "Executive · " : cap(x.mode) + " · ") + (LABELS[x.taskType] || x.taskType) +
             (many ? " → " + x.engines.length + " engines in parallel" + (x.judge ? ", synthesis by " + x.judge.label : "") : " → " + x.engines[0].label + " first, " + (x.engines.length - 1) + " on standby");
-          x.engines.forEach(function (e) { row(e); });
+          if (many) x.engines.forEach(function (e) { row(e); });
+          else {
+            row(x.engines[0]);
+            if (x.engines.length > 1) {
+              var sb = document.createElement("p"); sb.className = "standby";
+              sb.textContent = "Standby if needed: " + x.engines.slice(1).map(function (e) { return e.label; }).join(" · ");
+              $q(".engines").after(sb);
+            }
+          }
           if (x.judge && many) row({ engine: "_synth", label: "Synthesis · " + x.judge.label, model: x.judge.model });
         } else if (ev === "engine") {
+          if (x.status === "skipped" && !rows[x.engine]) return; // unused standby engine: nothing to show
           setRow(x);
         } else if (ev === "synth") {
           setRow({ engine: "_synth", label: "Synthesis", status: x.status === "skipped" ? "skipped" : x.status, model: x.model });
@@ -432,6 +443,9 @@
     s.appendChild(b); s.appendChild(document.createTextNode(v)); parent.appendChild(s);
   }
   function scrollEnd() { requestAnimationFrame(function () { el.scroll.scrollTop = el.scroll.scrollHeight; }); }
+  // While text streams in, keep following only if the reader hasn't scrolled up to read.
+  function nearBottom() { return el.scroll.scrollHeight - el.scroll.scrollTop - el.scroll.clientHeight < 140; }
+  function follow() { if (nearBottom()) scrollEnd(); }
   function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
 
   // Minimal, safe markdown: escape first, then format headings, bold, inline code, code blocks, lists, paragraphs.

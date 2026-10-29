@@ -1,5 +1,6 @@
 /* BLACK Edition — shared design tokens and components (dark + gold executive theme) */
 :root{
+  color-scheme:dark;
   --bg:#050505;
   --bg-2:#0b0b0c;
   --surface:rgba(255,255,255,.035);
@@ -23,6 +24,12 @@
 }
 *{margin:0;padding:0;box-sizing:border-box}
 html{scroll-behavior:smooth}
+/* Dark, thin scrollbars to match the theme (no white native bars) */
+*{scrollbar-width:thin;scrollbar-color:rgba(227,196,107,.28) transparent}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(227,196,107,.22);border-radius:8px}
+::-webkit-scrollbar-thumb:hover{background:rgba(227,196,107,.4)}
 body{background:var(--bg);color:var(--text);font-family:var(--font);overflow-x:hidden;-webkit-font-smoothing:antialiased;line-height:1.55}
 body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
   background:

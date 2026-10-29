@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/black.css?v=2">
+<link rel="stylesheet" href="assets/black.css?v=3">
 <link rel="stylesheet" href="assets/workspace.css?v=1">
 <script>
   // Preview gate: send visitors without access back to the unlock screen.
@@ -24,7 +24,8 @@ body{height:100vh;height:100dvh;overflow:hidden}
 .rail .wordmark{font-size:18px;padding:4px 8px 10px}
 .rail .new{justify-content:flex-start}
 .rail h4{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);padding:8px 8px 0;font-weight:500}
-.history{list-style:none;overflow:auto;flex:1;min-height:0;display:grid;align-content:start;gap:2px}
+.history{list-style:none;overflow-y:auto;overflow-x:hidden;flex:1;min-height:0;display:grid;align-content:start;gap:2px}
+.history li{min-width:0}
 .history button{width:100%;text-align:left;padding:9px 10px;border-radius:10px;color:#cfcabf;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .history button:hover,.history button.active{background:var(--surface-2);color:var(--text)}
 .history .empty{color:var(--dim);font-size:13px;padding:6px 10px}
@@ -112,6 +113,7 @@ body{height:100vh;height:100dvh;overflow:hidden}
 .eng.failed .st{color:#f2a7a0;white-space:normal}
 .eng.skipped{opacity:.45}
 @keyframes lv-spin{to{transform:rotate(360deg)}}
+.standby{margin-top:6px;font-size:12px;color:var(--dim)}
 .switches .switch{margin-top:8px;font-size:13px;color:var(--warn)}
 .cand-tabs{display:flex;gap:6px;margin-top:14px;flex-wrap:wrap}
 .cand-tabs button{font-size:12px;padding:5px 12px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
@@ -223,6 +225,6 @@ body{height:100vh;height:100dvh;overflow:hidden}
 
 <script src="config.js"></script>
 <script src="assets/workspace.js?v=1"></script>
-<script src="assets/app.js?v=3"></script>
+<script src="assets/app.js?v=4"></script>
 </body>
 </html>
