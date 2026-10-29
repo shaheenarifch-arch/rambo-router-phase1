@@ -130,3 +130,9 @@
   .ws-slide{min-height:0}
 }
 @media(prefers-reduced-motion:reduce){.ws *{animation:none!important;transition:none!important}.ws-papers .pp{opacity:0}}
+.ws-upload{margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;line-height:1.45;color:var(--muted);text-align:left;background:rgba(227,196,107,.06);border:1px solid var(--line-gold);border-left:3px solid var(--gold);border-radius:10px;padding:10px 14px}
+.ws-upload>span:nth-child(2){flex:1;min-width:200px}
+.ws-info{flex:none;width:18px;height:18px;border-radius:50%;border:1.5px solid var(--gold);color:var(--gold);font:700 11px/15px Georgia,serif;font-style:italic;text-align:center}
+.ws-upload b{color:var(--gold);font-weight:600}
+.ws-upload button{border:1px solid var(--line-gold);border-radius:999px;padding:6px 14px;color:var(--gold);background:transparent;font-size:12px;cursor:pointer}
+.ws-upload button:hover{background:rgba(227,196,107,.08)}
