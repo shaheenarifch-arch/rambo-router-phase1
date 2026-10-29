@@ -32,6 +32,8 @@ const LABEL = { anthropic: "Claude", openai: "GPT", gemini: "Gemini", perplexity
 
 // Same deterministic rules as RAMBO's TaskClassifier (classifier.ts).
 const RULES = [
+  // A URL, a domain (imlaak.com) or "look up / is X legit" needs the live web, so it is checked first.
+  [/(https?:\/\/\S+|\bwww\.\S+|\b[a-z0-9-]+(\.[a-z0-9-]+)*\.(com|org|net|ai|io|us|uk|co|app|dev|site|online|store|info|biz|pk|ca|xyz|shop|win|fun|trade|guide|markets|nexus|news|tech)\b|\b(look ?up|whois|who owns|check (out )?(the |this |that )?(site|website|domain|url|link|web ?page)|is (it|this|that|[a-z0-9.-]+) (legit|a scam))\b)/i, "web_lookup"],
   [/\b(debug|error|exception|stack trace|fails?)\b/i, "debugging"],
   [/\b(code|typescript|javascript|python|api|function|class)\b/i, "coding"],
   [/\b(architecture|system design|database schema|microservice)\b/i, "architecture"],
@@ -58,12 +60,14 @@ const ROUTES = {
   summarization: ["anthropic", "gemini", "openai"],
   extraction: ["gemini", "openai", "anthropic"],
   live_research: ["perplexity", "xai", "gemini", "anthropic", "openai"],
+  // Claude is the fallback here because it gets web search + fetch tools for these briefs.
+  web_lookup: ["perplexity", "anthropic", "xai", "gemini", "openai"],
   general_chat: ["anthropic", "openai", "gemini", "xai", "perplexity"]
 };
 const REASON = {
   coding: "CODING_SPECIALIST", debugging: "CODING_SPECIALIST", architecture: "DEEP_REASONING",
   business_strategy: "EXECUTIVE_WRITING", market_analysis: "LIVE_WEB_RESEARCH", product_research: "LIVE_WEB_RESEARCH",
-  seo_content: "LONG_FORM_WRITING", live_research: "LIVE_WEB_RESEARCH", summarization: "SYNTHESIS", extraction: "STRUCTURED_EXTRACTION", general_chat: "GENERAL_DEFAULT"
+  seo_content: "LONG_FORM_WRITING", live_research: "LIVE_WEB_RESEARCH", web_lookup: "WEB_INTENT", summarization: "SYNTHESIS", extraction: "STRUCTURED_EXTRACTION", general_chat: "GENERAL_DEFAULT"
 };
 
 const SYSTEM =
@@ -140,7 +144,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
     const failures = [];
     for (let i = 0; i < order.length; i++) {
       try {
-        const r = await call(order[i], env, tier, messages, systemFor(mode));
+        const r = await call(order[i], env, tier, messages, systemFor(mode), taskType === "web_lookup");
         if (i > 0) reasons.push("FALLBACK_FROM_" + order[0].toUpperCase());
         return json(shape({ requestId, mode, started, provider: order[i], model: r.model, text: r.text, reasons, fallbackUsed: i > 0, usage: r.usage }));
       } catch (e) { failures.push(failure(order[i], e)); }
@@ -154,7 +158,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
 // Executive Mode: up to 3 engines in parallel, disagreements flagged, one synthesis.
 async function executive({ env, order, messages, taskType, requestId, started }) {
   const panel = order.slice(0, 3);
-  const settled = await Promise.allSettled(panel.map((e) => call(e, env, "deep", messages)));
+  const settled = await Promise.allSettled(panel.map((e) => call(e, env, "deep", messages, SYSTEM, taskType === "web_lookup")));
   const candidates = [];
   const failures = [];
   settled.forEach((s, i) => {
@@ -190,6 +194,13 @@ async function executive({ env, order, messages, taskType, requestId, started })
 }
 const cand = (c) => ({ model: LABEL[c.provider] + " · " + c.model, text: c.text });
 
+// Server-side web tools Claude gets on web_lookup briefs (no beta header needed).
+const WEB_TOOLS = [
+  { type: "web_search_20250305", name: "web_search", max_uses: 3 },
+  { type: "web_fetch_20260318", name: "web_fetch", max_uses: 3 }
+];
+const webTools = (web) => (web ? { tools: WEB_TOOLS } : {});
+
 // Quick tiers answer at low effort; Haiku can also skip thinking entirely (Sonnet/Opus 5.5 reject "disabled").
 function claudeSpeed(m, tier) {
   if (tier !== "fast" && tier !== "smart") return {};
@@ -206,10 +217,10 @@ function model(env, provider, tier) {
   return env[up + "_MODEL" + t] || (tier === "smart" ? env[up + "_MODEL"] : null) || env[up + "_MODEL"] || DEFAULT_MODELS[provider][tier];
 }
 
-async function call(provider, env, tier, messages, sys = SYSTEM) {
+async function call(provider, env, tier, messages, sys = SYSTEM, web = false) {
   const m = model(env, provider, tier);
   if (provider === "anthropic") {
-    const h = { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" }, base = { model: m, max_tokens: 4096, system: sys, messages };
+    const h = { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" }, base = { model: m, max_tokens: 4096, system: sys, messages, ...webTools(web) };
     const fast = claudeSpeed(m, tier);
     const j = await post("https://api.anthropic.com/v1/messages", h, { ...base, ...fast })
       .catch((e) => (Object.keys(fast).length && /^400\b/.test(String(e.message)) ? post("https://api.anthropic.com/v1/messages", h, base) : Promise.reject(e)));
@@ -320,14 +331,14 @@ function deltaPump(send, target) {
 }
 
 // Runs one engine with live status + deltas. Never throws: returns { ok, ... }.
-async function runEngine({ env, send, provider, tier, messages, target, timeoutMs, system }) {
+async function runEngine({ env, send, provider, tier, messages, target, timeoutMs, system, web }) {
   const info = engineInfo(env, provider, tier);
   const t0 = Date.now();
   let chars = 0, writing = false;
   const pump = deltaPump(send, target || provider);
   await send("engine", { ...info, status: "thinking" });
   const r = await stream(provider, env, tier, messages, {
-    timeoutMs, system,
+    timeoutMs, system, web,
     onDelta(txt) {
       if (!writing) { writing = true; send("engine", { ...info, status: "writing", ms: Date.now() - t0 }); }
       chars += txt.length; pump.push(txt);
@@ -354,7 +365,7 @@ async function liveSingle({ env, send, mode, tier, order, messages, taskType, re
   const failures = [];
   for (let i = 0; i < order.length; i++) {
     if (i > 0) await send("switch", { from: LABEL[order[i - 1]], to: LABEL[order[i]], reason: failures[failures.length - 1].error });
-    const r = await runEngine({ env, send, provider: order[i], tier, messages, target: "final", timeoutMs: ENGINE_TIMEOUT_MS, system: systemFor(mode) });
+    const r = await runEngine({ env, send, provider: order[i], tier, messages, target: "final", timeoutMs: ENGINE_TIMEOUT_MS, system: systemFor(mode), web: taskType === "web_lookup" });
     if (r.ok) {
       if (i > 0) reasons.push("FALLBACK_FROM_" + order[0].toUpperCase());
       if (r.partial) reasons.push("PARTIAL_TIMEOUT");
@@ -375,7 +386,7 @@ async function liveExecutive({ env, send, order, messages, taskType, requestId, 
     engines: panel.map((e) => engineInfo(env, e, "deep")), judge: engineInfo(env, judge, synthTier)
   });
 
-  const results = await Promise.all(panel.map((p) => runEngine({ env, send, provider: p, tier: "deep", messages, timeoutMs: ENGINE_TIMEOUT_MS })));
+  const results = await Promise.all(panel.map((p) => runEngine({ env, send, provider: p, tier: "deep", messages, timeoutMs: ENGINE_TIMEOUT_MS, web: taskType === "web_lookup" })));
   const good = results.filter((r) => r.ok);
   const failures = results.filter((r) => !r.ok).map((r) => r.failure);
   if (!good.length) return send("error", { error: "ALL_ENGINES_FAILED", engines: failures });
@@ -421,7 +432,7 @@ async function liveExecutive({ env, send, order, messages, taskType, requestId, 
 }
 
 // Streaming provider calls. Returns { model, text, usage, error? } and never throws.
-async function stream(provider, env, tier, messages, { onDelta, timeoutMs, system }) {
+async function stream(provider, env, tier, messages, { onDelta, timeoutMs, system, web }) {
   const m = model(env, provider, tier);
   const sys = system || SYSTEM;
   const out = { model: m, text: "", usage: {} };
@@ -441,7 +452,7 @@ async function stream(provider, env, tier, messages, { onDelta, timeoutMs, syste
     if (provider === "anthropic") {
       url = "https://api.anthropic.com/v1/messages";
       headers = { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" };
-      payload = { model: m, max_tokens: 4096, system: sys, messages, stream: true, ...claudeSpeed(m, tier) };
+      payload = { model: m, max_tokens: 4096, system: sys, messages, stream: true, ...claudeSpeed(m, tier), ...webTools(web) };
       onData = (j) => {
         if (j.type === "message_start" && j.message) { out.model = j.message.model || m; out.usage.inputTokens = j.message.usage && j.message.usage.input_tokens; }
         else if (j.type === "content_block_delta" && j.delta && j.delta.type === "text_delta") add(j.delta.text);
