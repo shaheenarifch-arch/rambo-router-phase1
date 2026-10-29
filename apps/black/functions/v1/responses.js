@@ -98,6 +98,7 @@ const MAX_CHARS = 40000; // room for one attached spreadsheet summary (~11K char
 const TIMEOUT_MS = 55000;
 const ENGINE_TIMEOUT_MS = 45000;   // per engine in a live (streamed) brief; a slow engine is skipped, not fatal
 const SYNTH_TIMEOUT_MS = 50000;
+const HEDGE_MS = 1500;              // no first token from the lead engine by then -> race the next standby in parallel
 const PARTIAL_MIN_CHARS = 400;     // a timed-out engine that already wrote this much is kept as a partial answer
 const SYNTH_CANDIDATE_CHARS = 7000; // trim each candidate before synthesis so the judge answers faster
 
@@ -306,7 +307,7 @@ async function post(url, headers, payload) {
 //   route  {mode, taskType, reasons, engines:[{engine,label,model}], judge}
 //   engine {engine, label, model, status: thinking|writing|done|failed|skipped, ms, tokens, chars, partial, error}
 //   delta  {target: <engine>|"final", text}
-//   switch {from, to, reason}            (fallback to the next engine)
+//   switch {from, to, reason, hedge?}    (fallback to the next engine; hedge=true means raced in parallel)
 //   synth  {status: thinking|writing|done|skipped, label, model}
 //   ping   {t}                           (keep-alive every 8s)
 //   done   <same body as the JSON response>
@@ -356,21 +357,26 @@ function deltaPump(send, target) {
 }
 
 // Runs one engine with live status + deltas. Never throws: returns { ok, ... }.
-async function runEngine({ env, send, provider, tier, messages, target, timeoutMs, system, web }) {
+// Optional `claim` (hedged race): called on the first token; returns false if another engine already won,
+// in which case this engine's output is dropped. Optional `signal` cancels the engine (it lost the race).
+async function runEngine({ env, send, provider, tier, messages, target, timeoutMs, system, web, signal, claim }) {
   const info = engineInfo(env, provider, tier);
   const t0 = Date.now();
-  let chars = 0, writing = false;
+  let chars = 0, writing = false, lost = false;
   const pump = deltaPump(send, target || provider);
   await send("engine", { ...info, status: "thinking" });
   const r = await stream(provider, env, tier, messages, {
-    timeoutMs, system, web,
+    timeoutMs, system, web, signal,
     onDelta(txt) {
+      if (lost) return;
+      if (!writing && claim && !claim()) { lost = true; return; }
       if (!writing) { writing = true; send("engine", { ...info, status: "writing", ms: Date.now() - t0 }); }
       chars += txt.length; pump.push(txt);
     }
   });
   pump.end();
   const ms = Date.now() - t0;
+  if (lost || (signal && signal.aborted)) return { ok: false, cancelled: true, provider, ms };
   const text = (r.text || "").trim();
   if (text && (!r.error || text.length >= PARTIAL_MIN_CHARS)) {
     const partial = !!r.error;
@@ -387,19 +393,63 @@ async function liveSingle({ env, send, mode, tier, order, messages, taskType, re
   if (asked) reasons.push("USER_REQUESTED_" + asked.toUpperCase());
   if (mode === "executive") reasons.push("EXECUTIVE_NEEDS_TWO_ENGINES");
   await send("route", { mode, taskType, reasons, engines: order.map((e) => engineInfo(env, e, tier)), judge: null });
+
+  // Hedged start: the lead engine runs alone; if it has not produced a first token within HEDGE_MS,
+  // the next standby is fired in parallel. Whichever streams first wins and the other is cancelled.
+  // An engine that fails outright still falls back to the next standby, as before.
   const failures = [];
-  for (let i = 0; i < order.length; i++) {
-    if (i > 0) await send("switch", { from: LABEL[order[i - 1]], to: LABEL[order[i]], reason: failures[failures.length - 1].error });
-    const r = await runEngine({ env, send, provider: order[i], tier, messages, target: "final", timeoutMs: ENGINE_TIMEOUT_MS, system: systemFor(mode), web: taskType === "web_lookup" });
-    if (r.ok) {
-      if (i > 0) reasons.push("FALLBACK_FROM_" + order[0].toUpperCase());
-      if (r.partial) reasons.push("PARTIAL_TIMEOUT");
-      for (let j = i + 1; j < order.length; j++) await send("engine", { ...engineInfo(env, order[j], tier), status: "skipped" });
-      return send("done", shape({ requestId, mode, started, provider: r.provider, model: r.model, text: r.text, reasons, fallbackUsed: i > 0, usage: r.usage }));
+  const running = new Map(); // provider -> AbortController
+  const system = systemFor(mode), web = taskType === "web_lookup";
+  let winner = null, next = 0, hedged = false, settled = false, hedgeTimer = null, settle;
+  const finished = new Promise((res) => (settle = res));
+  const finish = (r) => { if (settled) return; settled = true; clearTimeout(hedgeTimer); settle(r); };
+
+  const claim = (p) => {
+    if (winner) return winner === p;
+    winner = p; clearTimeout(hedgeTimer);
+    for (const [q, ctl] of running) if (q !== p) {
+      ctl.abort();
+      send("engine", { ...engineInfo(env, q, tier), status: "cancelled", error: LABEL[p] + " streamed first" });
     }
+    return true;
+  };
+  const launch = () => {
+    if (next >= order.length) return false;
+    const p = order[next++];
+    const ctl = new AbortController();
+    running.set(p, ctl);
+    runEngine({ env, send, provider: p, tier, messages, target: "final", timeoutMs: ENGINE_TIMEOUT_MS, system, web, signal: ctl.signal, claim: () => claim(p) })
+      .then((r) => { running.delete(p); onResult(p, r); }, (e) => { running.delete(p); onResult(p, { ok: false, provider: p, failure: failure(p, e) }); });
+    return true;
+  };
+  const onResult = (p, r) => {
+    if (settled || r.cancelled) return;
+    if (r.ok) return finish(r);
     failures.push(r.failure);
-  }
-  return send("error", { error: "ALL_ENGINES_FAILED", engines: failures });
+    if (winner === p) winner = null; // the winner broke off before a usable answer
+    if (winner || running.size) return; // another engine is still racing
+    const to = order[next];
+    if (!to) return finish(null);
+    send("switch", { from: LABEL[p], to: LABEL[to], reason: r.failure.error });
+    launch();
+  };
+
+  launch();
+  if (order.length > 1) hedgeTimer = setTimeout(() => {
+    if (settled || winner || next >= order.length) return;
+    hedged = true;
+    send("switch", { from: LABEL[order[next - 1]], to: LABEL[order[next]], reason: "no first token in " + (HEDGE_MS / 1000) + "s", hedge: true });
+    launch();
+  }, HEDGE_MS);
+
+  const r = await finished;
+  if (!r) return send("error", { error: "ALL_ENGINES_FAILED", engines: failures });
+  const fallbackUsed = r.provider !== order[0];
+  if (hedged) reasons.push("HEDGED_AFTER_" + HEDGE_MS + "MS");
+  if (fallbackUsed) reasons.push((hedged && !failures.length ? "HEDGE_WON_" : "FALLBACK_FROM_") + (hedged && !failures.length ? r.provider : order[0]).toUpperCase());
+  if (r.partial) reasons.push("PARTIAL_TIMEOUT");
+  for (let j = next; j < order.length; j++) await send("engine", { ...engineInfo(env, order[j], tier), status: "skipped" });
+  return send("done", shape({ requestId, mode, started, provider: r.provider, model: r.model, text: r.text, reasons, fallbackUsed, usage: r.usage }));
 }
 
 async function liveExecutive({ env, send, order, messages, taskType, requestId, started }) {
@@ -457,13 +507,14 @@ async function liveExecutive({ env, send, order, messages, taskType, requestId, 
 }
 
 // Streaming provider calls. Returns { model, text, usage, error? } and never throws.
-async function stream(provider, env, tier, messages, { onDelta, timeoutMs, system, web }) {
+async function stream(provider, env, tier, messages, { onDelta, timeoutMs, system, web, signal }) {
   const m = model(env, provider, tier);
   const sys = system || SYSTEM;
   const out = { model: m, text: "", usage: {} };
   const add = (t) => { if (t) { out.text += t; onDelta(t); } };
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), timeoutMs || TIMEOUT_MS);
+  if (signal) { if (signal.aborted) ctl.abort(); else signal.addEventListener("abort", () => ctl.abort(), { once: true }); }
   try {
     if (provider === "perplexity") {
       // Agent API: answered in one piece (web search runs server side), then shown at once.
