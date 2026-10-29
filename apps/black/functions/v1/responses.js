@@ -3,6 +3,8 @@
  *
  * GET  /v1/responses  -> { live, engines }  (which engines have keys configured)
  * POST /v1/responses  -> RAMBO-shaped response (same contract as rambo-router-phase1 responses.ts)
+ * POST with { stream: true } -> text/event-stream of live events (see "Live stream" below):
+ *   route, engine, delta, switch, synth, ping, done, error
  *
  * Secrets (Cloudflare Pages > black-edition > Settings > Variables and secrets):
  *   BLACK_ACCESS_CODE   required: briefs must send header x-black-access with this value
@@ -68,12 +70,16 @@ const SYSTEM =
 const MAX_MESSAGES = 12;
 const MAX_CHARS = 24000;
 const TIMEOUT_MS = 55000;
+const ENGINE_TIMEOUT_MS = 45000;   // per engine in a live (streamed) brief; a slow engine is skipped, not fatal
+const SYNTH_TIMEOUT_MS = 50000;
+const PARTIAL_MIN_CHARS = 400;     // a timed-out engine that already wrote this much is kept as a partial answer
+const SYNTH_CANDIDATE_CHARS = 7000; // trim each candidate before synthesis so the judge answers faster
 
 export async function onRequestGet({ env }) {
   return json({ live: engines(env).length > 0 && !!env.BLACK_ACCESS_CODE, engines: engines(env).map((e) => LABEL[e]) });
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env, waitUntil }) {
   if (!env.BLACK_ACCESS_CODE) return json({ error: "GATEWAY_NOT_CONFIGURED" }, 503);
   if (!safeEqual(request.headers.get("x-black-access") || "", env.BLACK_ACCESS_CODE)) return json({ error: "ACCESS_DENIED" }, 401);
   const available = engines(env);
@@ -95,6 +101,8 @@ export async function onRequestPost({ request, env }) {
   const requestId = crypto.randomUUID();
   const started = Date.now();
 
+  if (body.stream === true) return live({ env, waitUntil, mode, tier, order, messages, taskType, requestId, started });
+
   try {
     if (mode === "executive" && order.length >= 2) {
       const ex = await executive({ env, order, messages, taskType, requestId, started });
@@ -113,7 +121,7 @@ export async function onRequestPost({ request, env }) {
     }
     return allFailed(failures);
   } catch (e) {
-    return json({ error: "INTERNAL_ERROR" }, 500);
+    return json({ error: "INTERNAL_ERROR", detail: String((e && e.message) || e).slice(0, 160) }, 500);
   }
 }
 
@@ -124,8 +132,8 @@ async function executive({ env, order, messages, taskType, requestId, started })
   const candidates = [];
   const failures = [];
   settled.forEach((s, i) => {
-    if (s.status === "fulfilled") candidates.push({ provider: panel[i], model: s.value.model, text: s.value.text });
-    else failures.push(failure(panel[i], s.reason));
+    if (s.status === "fulfilled" && s.value.text && s.value.text.trim()) candidates.push({ provider: panel[i], model: s.value.model, text: s.value.text });
+    else failures.push(s.status === "fulfilled" ? { engine: LABEL[panel[i]], error: "empty answer" } : failure(panel[i], s.reason));
   });
   if (!candidates.length) return { failures };
   if (candidates.length === 1) {
@@ -142,7 +150,8 @@ async function executive({ env, order, messages, taskType, requestId, started })
   const judge = order.includes("anthropic") ? "anthropic" : candidates[0].provider;
   let synth;
   try { synth = await call(judge, env, "deep", [{ role: "user", content: synthPrompt }]); }
-  catch { synth = { model: candidates[0].model, text: candidates[0].text + "\nDISAGREEMENTS: none" }; }
+  catch { synth = null; }
+  if (!synth || !synth.text || !synth.text.trim()) synth = { model: candidates[0].model, text: candidates[0].text + "\nDISAGREEMENTS: none" };
 
   const m = synth.text.match(/\n?\**DISAGREEMENTS:?\**\s*(.*)\s*$/i);
   const disagreements = m && !/^none\.?$/i.test(m[1].trim()) ? m[1].split(";").map((s) => s.trim()).filter(Boolean).slice(0, 5) : [];
@@ -218,6 +227,260 @@ async function post(url, headers, payload) {
     }
     return j;
   } finally { clearTimeout(t); }
+}
+
+// ---------- Live stream (POST { stream: true }) ----------
+// Sends Server-Sent Events as the work happens, so the console can show each engine working:
+//   route  {mode, taskType, reasons, engines:[{engine,label,model}], judge}
+//   engine {engine, label, model, status: thinking|writing|done|failed|skipped, ms, tokens, chars, partial, error}
+//   delta  {target: <engine>|"final", text}
+//   switch {from, to, reason}            (fallback to the next engine)
+//   synth  {status: thinking|writing|done|skipped, label, model}
+//   ping   {t}                           (keep-alive every 8s)
+//   done   <same body as the JSON response>
+//   error  {error, engines?}
+function live({ env, waitUntil, mode, tier, order, messages, taskType, requestId, started }) {
+  const { readable, writable } = new TransformStream();
+  const w = writable.getWriter();
+  const enc = new TextEncoder();
+  let closed = false;
+  const send = (event, data) => {
+    if (closed) return Promise.resolve();
+    return w.write(enc.encode("event: " + event + "\ndata: " + JSON.stringify(data) + "\n\n")).catch(() => { closed = true; });
+  };
+  const ping = setInterval(() => send("ping", { t: Date.now() - started }), 8000);
+
+  const job = (async () => {
+    try {
+      const executive = mode === "executive" && order.length >= 2;
+      await (executive ? liveExecutive : liveSingle)({ env, send, mode, tier, order, messages, taskType, requestId, started });
+    } catch (e) {
+      await send("error", { error: "INTERNAL_ERROR", detail: String((e && e.message) || e).slice(0, 160) });
+    } finally {
+      clearInterval(ping);
+      closed = true;
+      try { await w.close(); } catch {}
+    }
+  })();
+  if (typeof waitUntil === "function") waitUntil(job);
+
+  return new Response(readable, {
+    headers: { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-store, no-transform", "x-accel-buffering": "no" }
+  });
+}
+
+function engineInfo(env, provider, tier) {
+  return { engine: provider, label: LABEL[provider], model: model(env, provider, tier) };
+}
+
+// Batches token deltas (~every 90ms) so the browser repaints smoothly without one event per token.
+function deltaPump(send, target) {
+  let buf = "", t = null;
+  const flush = () => { t = null; if (buf) { const x = buf; buf = ""; send("delta", { target, text: x }); } };
+  return {
+    push(txt) { if (!txt) return; buf += txt; if (!t) t = setTimeout(flush, 90); },
+    end() { if (t) clearTimeout(t); flush(); }
+  };
+}
+
+// Runs one engine with live status + deltas. Never throws: returns { ok, ... }.
+async function runEngine({ env, send, provider, tier, messages, target, timeoutMs, system }) {
+  const info = engineInfo(env, provider, tier);
+  const t0 = Date.now();
+  let chars = 0, writing = false;
+  const pump = deltaPump(send, target || provider);
+  await send("engine", { ...info, status: "thinking" });
+  const r = await stream(provider, env, tier, messages, {
+    timeoutMs, system,
+    onDelta(txt) {
+      if (!writing) { writing = true; send("engine", { ...info, status: "writing", ms: Date.now() - t0 }); }
+      chars += txt.length; pump.push(txt);
+    }
+  });
+  pump.end();
+  const ms = Date.now() - t0;
+  const text = (r.text || "").trim();
+  if (text && (!r.error || text.length >= PARTIAL_MIN_CHARS)) {
+    const partial = !!r.error;
+    await send("engine", { ...info, model: r.model || info.model, status: "done", ms, chars: text.length, tokens: r.usage && r.usage.outputTokens, partial });
+    return { ok: true, provider, model: r.model || info.model, text, usage: r.usage, partial, ms };
+  }
+  const err = r.error ? failure(provider, r.error) : { engine: LABEL[provider], error: "empty answer" };
+  await send("engine", { ...info, status: "failed", ms, error: err.error });
+  return { ok: false, provider, failure: err };
+}
+
+async function liveSingle({ env, send, mode, tier, order, messages, taskType, requestId, started }) {
+  const reasons = [REASON[taskType], "MODE_" + mode.toUpperCase()];
+  if (mode === "executive") reasons.push("EXECUTIVE_NEEDS_TWO_ENGINES");
+  await send("route", { mode, taskType, reasons, engines: order.map((e) => engineInfo(env, e, tier)), judge: null });
+  const failures = [];
+  for (let i = 0; i < order.length; i++) {
+    if (i > 0) await send("switch", { from: LABEL[order[i - 1]], to: LABEL[order[i]], reason: failures[failures.length - 1].error });
+    const r = await runEngine({ env, send, provider: order[i], tier, messages, target: "final", timeoutMs: ENGINE_TIMEOUT_MS });
+    if (r.ok) {
+      if (i > 0) reasons.push("FALLBACK_FROM_" + order[0].toUpperCase());
+      if (r.partial) reasons.push("PARTIAL_TIMEOUT");
+      for (let j = i + 1; j < order.length; j++) await send("engine", { ...engineInfo(env, order[j], tier), status: "skipped" });
+      return send("done", shape({ requestId, mode, started, provider: r.provider, model: r.model, text: r.text, reasons, fallbackUsed: i > 0, usage: r.usage }));
+    }
+    failures.push(r.failure);
+  }
+  return send("error", { error: "ALL_ENGINES_FAILED", engines: failures });
+}
+
+async function liveExecutive({ env, send, order, messages, taskType, requestId, started }) {
+  const panel = order.slice(0, 3);
+  const judge = order.includes("anthropic") ? "anthropic" : panel[0];
+  const synthTier = env.SYNTH_TIER === "deep" ? "deep" : "smart";
+  await send("route", {
+    mode: "executive", taskType, reasons: [REASON[taskType], "EXECUTIVE_PARALLEL_" + panel.length],
+    engines: panel.map((e) => engineInfo(env, e, "deep")), judge: engineInfo(env, judge, synthTier)
+  });
+
+  const results = await Promise.all(panel.map((p) => runEngine({ env, send, provider: p, tier: "deep", messages, timeoutMs: ENGINE_TIMEOUT_MS })));
+  const good = results.filter((r) => r.ok);
+  const failures = results.filter((r) => !r.ok).map((r) => r.failure);
+  if (!good.length) return send("error", { error: "ALL_ENGINES_FAILED", engines: failures });
+
+  const candidates = good.map((r) => ({ model: LABEL[r.provider] + " · " + r.model + (r.partial ? " (partial)" : ""), text: r.text }));
+  const reasons = [REASON[taskType], "EXECUTIVE_PARALLEL_" + good.length];
+  if (good.length === 1) {
+    await send("synth", { status: "skipped", label: LABEL[good[0].provider], model: good[0].model });
+    return send("done", shape({ requestId, mode: "executive", started, provider: good[0].provider, model: good[0].model, text: good[0].text,
+      reasons: [REASON[taskType], "EXECUTIVE_ONLY_ONE_ENGINE_ANSWERED"], fallbackUsed: true, executive: { candidates, disagreements: [] } }));
+  }
+
+  const brief = messages[messages.length - 1].content;
+  const synthPrompt =
+    "Executive brief:\n" + brief + "\n\n" +
+    good.map((c, i) => `--- Answer ${i + 1} (${LABEL[c.provider]}) ---\n${c.text.slice(0, SYNTH_CANDIDATE_CHARS)}`).join("\n\n") +
+    "\n\nWrite ONE executive synthesis: the best combined answer with a clear recommendation. " +
+    "Then, on the very last line, write 'DISAGREEMENTS:' followed by a semicolon-separated list of material points where the answers disagree, or 'none'.";
+  const sInfo = engineInfo(env, judge, synthTier);
+  await send("synth", { status: "thinking", label: sInfo.label, model: sInfo.model });
+  const pump = deltaPump(send, "final");
+  let writing = false;
+  const s = await stream(judge, env, synthTier, [{ role: "user", content: synthPrompt }], {
+    timeoutMs: SYNTH_TIMEOUT_MS,
+    onDelta(txt) { if (!writing) { writing = true; send("synth", { status: "writing", label: sInfo.label, model: sInfo.model }); } pump.push(txt); }
+  });
+  pump.end();
+
+  let synthText = (s.text || "").trim();
+  if (!synthText || (s.error && synthText.length < PARTIAL_MIN_CHARS)) {
+    // Synthesis failed: hand back the strongest (longest) candidate instead of an error.
+    const best = good.slice().sort((a, b) => b.text.length - a.text.length)[0];
+    await send("synth", { status: "skipped", label: LABEL[best.provider], model: best.model, error: s.error ? failure(judge, s.error).error : "empty" });
+    return send("done", shape({ requestId, mode: "executive", started, provider: good.map((c) => LABEL[c.provider]).join(" + "), model: "best candidate · " + LABEL[best.provider],
+      text: best.text, reasons: reasons.concat("SYNTHESIS_SKIPPED"), fallbackUsed: true, executive: { candidates, disagreements: [] } }));
+  }
+  await send("synth", { status: "done", label: sInfo.label, model: s.model || sInfo.model });
+  const m = synthText.match(/\n?\**DISAGREEMENTS:?\**\s*(.*)\s*$/i);
+  const disagreements = m && !/^none\.?$/i.test(m[1].trim()) ? m[1].split(";").map((x) => x.trim()).filter(Boolean).slice(0, 5) : [];
+  const text = m ? synthText.slice(0, m.index).trim() || synthText : synthText;
+  return send("done", shape({ requestId, mode: "executive", started, provider: good.map((c) => LABEL[c.provider]).join(" + "), model: "synthesis by " + LABEL[judge],
+    text, reasons, fallbackUsed: good.length < panel.length, executive: { candidates, disagreements } }));
+}
+
+// Streaming provider calls. Returns { model, text, usage, error? } and never throws.
+async function stream(provider, env, tier, messages, { onDelta, timeoutMs, system }) {
+  const m = model(env, provider, tier);
+  const sys = system || SYSTEM;
+  const out = { model: m, text: "", usage: {} };
+  const add = (t) => { if (t) { out.text += t; onDelta(t); } };
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs || TIMEOUT_MS);
+  try {
+    if (provider === "perplexity") {
+      // Agent API: answered in one piece (web search runs server side), then shown at once.
+      const convo = messages.map((x) => (x.role === "user" ? "User: " : "Assistant: ") + x.content).join("\n\n");
+      const j = await postJson("https://api.perplexity.ai/v1/agent", { authorization: "Bearer " + env.PERPLEXITY_API_KEY }, { effort: m, input: sys + "\n\n" + convo }, ctl.signal);
+      out.model = j.model ? "web · " + j.model : "web search";
+      add(agentText(j));
+      return out;
+    }
+    let url, headers, payload, onData;
+    if (provider === "anthropic") {
+      url = "https://api.anthropic.com/v1/messages";
+      headers = { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" };
+      payload = { model: m, max_tokens: 4096, system: sys, messages, stream: true };
+      onData = (j) => {
+        if (j.type === "message_start" && j.message) { out.model = j.message.model || m; out.usage.inputTokens = j.message.usage && j.message.usage.input_tokens; }
+        else if (j.type === "content_block_delta" && j.delta && j.delta.type === "text_delta") add(j.delta.text);
+        else if (j.type === "message_delta" && j.usage) out.usage.outputTokens = j.usage.output_tokens;
+        else if (j.type === "error") throw new Error((j.error && j.error.message) || "stream error");
+      };
+    } else if (provider === "openai" || provider === "xai") {
+      url = provider === "openai" ? "https://api.openai.com/v1/chat/completions" : "https://api.x.ai/v1/chat/completions";
+      headers = { authorization: "Bearer " + (provider === "openai" ? env.OPENAI_API_KEY : env.XAI_API_KEY) };
+      payload = { model: m, messages: [{ role: "system", content: sys }, ...messages], stream: true };
+      if (provider === "openai") payload.stream_options = { include_usage: true };
+      onData = (j) => {
+        if (j.model) out.model = j.model;
+        const d = j.choices && j.choices[0] && j.choices[0].delta;
+        if (d && typeof d.content === "string") add(d.content);
+        if (j.usage) { out.usage.inputTokens = j.usage.prompt_tokens; out.usage.outputTokens = j.usage.completion_tokens; }
+      };
+    } else if (provider === "gemini") {
+      url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:streamGenerateContent?alt=sse`;
+      headers = { "x-goog-api-key": env.GEMINI_API_KEY };
+      payload = {
+        systemInstruction: { parts: [{ text: sys }] },
+        contents: messages.map((x) => ({ role: x.role === "assistant" ? "model" : "user", parts: [{ text: x.content }] }))
+      };
+      onData = (j) => {
+        ((j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || []).forEach((p) => add(p.text || ""));
+        if (j.usageMetadata) { out.usage.inputTokens = j.usageMetadata.promptTokenCount; out.usage.outputTokens = j.usageMetadata.candidatesTokenCount; }
+      };
+    } else throw new Error("UNKNOWN_PROVIDER");
+
+    const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(payload), signal: ctl.signal });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      const e = j && (Array.isArray(j) ? j[0] && j[0].error : j.error);
+      const msg = typeof e === "string" ? e : (e && e.message) || (j && j.message) || r.statusText || "";
+      throw new Error(`${r.status} ${String(msg)}`.trim());
+    }
+    await readSse(r.body, onData);
+    return out;
+  } catch (e) {
+    out.error = e;
+    return out;
+  } finally { clearTimeout(timer); }
+}
+
+async function postJson(url, headers, payload, signal) {
+  const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(payload), signal });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const e = j && j.error;
+    const msg = typeof e === "string" ? e : (e && e.message) || (j && j.message) || r.statusText || "";
+    throw new Error(`${r.status} ${String(msg)}`.trim());
+  }
+  return j;
+}
+
+// Reads an SSE body and calls onData(json) for each `data:` line (ignores [DONE] and non-JSON).
+async function readSse(body, onData) {
+  const reader = body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, i).replace(/\r$/, "");
+      buf = buf.slice(i + 1);
+      if (!line.startsWith("data:")) continue;
+      const data = line.slice(5).trim();
+      if (!data || data === "[DONE]") continue;
+      let j; try { j = JSON.parse(data); } catch { continue; }
+      onData(j);
+    }
+  }
 }
 
 // ---------- helpers ----------

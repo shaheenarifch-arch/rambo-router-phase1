@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/black.css?v=2">
+<link rel="stylesheet" href="assets/workspace.css?v=1">
 <script>
   // Preview gate: send visitors without access back to the unlock screen.
   try { if (localStorage.getItem("black.access") !== "preview") location.replace("index.html?unlock=1"); } catch (e) {}
@@ -45,6 +46,9 @@ body{height:100vh;height:100dvh;overflow:hidden}
 .welcome h1{font-size:clamp(28px,4.4vw,44px);letter-spacing:-.02em;font-weight:600}
 .welcome p{color:var(--muted);margin-top:8px}
 .tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:30px}
+.welcome .ws{margin-top:22px}
+.welcome:has(.ws){padding-top:1vh}
+.welcome:has(.ws) h1{font-size:clamp(24px,3.4vw,36px)}
 .tile{text-align:left;padding:18px;border-radius:16px;background:var(--surface);border:1px solid var(--line);transition:border-color .2s,transform .2s}
 .tile:hover{border-color:var(--line-gold);transform:translateY(-2px)}
 .tile strong{display:block;color:var(--gold);font-weight:600;margin-bottom:4px}
@@ -78,6 +82,41 @@ body{height:100vh;height:100dvh;overflow:hidden}
 .thinking i:nth-child(2){animation-delay:.15s}.thinking i:nth-child(3){animation-delay:.3s}
 @keyframes pulse{0%,100%{opacity:.25}50%{opacity:1}}
 .error{color:#f2a7a0}
+.retry{margin-top:12px}
+/* Live Engines card */
+.live-card .clock{font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums}
+.rambo{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:rgba(0,0,0,.25)}
+.rambo b{color:var(--gold);letter-spacing:.18em;font-size:11px}
+.rpulse{width:8px;height:8px;border-radius:50%;background:var(--gold);animation:lv-pulse 1.4s infinite;flex:none}
+@keyframes lv-pulse{0%{box-shadow:0 0 0 0 rgba(227,196,107,.6)}70%{box-shadow:0 0 0 8px rgba(227,196,107,0)}100%{box-shadow:0 0 0 0 rgba(227,196,107,0)}}
+.engines{list-style:none;display:grid;gap:6px;margin-top:10px}
+.eng{display:grid;grid-template-columns:12px minmax(70px,auto) minmax(0,1fr) auto 52px auto;gap:10px;align-items:center;font-size:13px;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.02);transition:border-color .3s,background .3s}
+.eng .dot{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--dim)}
+.eng .name{font-weight:600;color:var(--text)}
+.eng .model{color:var(--dim);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.eng .st{color:var(--muted);white-space:nowrap}
+.eng .time{color:var(--gold);font-variant-numeric:tabular-nums;text-align:right;font-size:12px}
+.eng .stat{color:var(--dim);font-size:12px;white-space:nowrap}
+.eng.thinking .dot,.eng.writing .dot{border-color:var(--gold);border-top-color:transparent;animation:lv-spin .8s linear infinite}
+.eng.writing{border-color:var(--line-gold);background:rgba(227,196,107,.05)}
+.eng.writing .st{color:var(--gold)}
+.eng.done .dot{border:0;background:var(--ok)}
+.eng.done.partial .dot{background:var(--warn)}
+.eng.failed{border-color:rgba(242,167,160,.3)}
+.eng.failed .dot{border:0;background:#f2a7a0}
+.eng.failed .st{color:#f2a7a0;white-space:normal}
+.eng.skipped{opacity:.45}
+@keyframes lv-spin{to{transform:rotate(360deg)}}
+.switches .switch{margin-top:8px;font-size:13px;color:var(--warn)}
+.cand-tabs{display:flex;gap:6px;margin-top:14px;flex-wrap:wrap}
+.cand-tabs button{font-size:12px;padding:5px 12px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.cand-tabs button[aria-pressed="true"]{border-color:var(--line-gold);color:var(--gold)}
+.cand-view{margin-top:8px;max-height:260px;overflow:auto;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:rgba(0,0,0,.25);font-size:14px}
+.final-head{margin-top:16px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold)}
+.live-card .final{margin-top:8px}
+.caret{display:inline-block;width:8px;height:1em;vertical-align:-2px;background:var(--gold);margin-left:2px;animation:lv-blink 1s steps(2) infinite}
+@keyframes lv-blink{50%{opacity:0}}
+@media(max-width:640px){.eng{grid-template-columns:12px 1fr auto 46px;row-gap:2px}.eng .model{grid-column:2/-1;grid-row:2}.eng .stat{display:none}}
 /* Composer */
 .composer{padding:12px 22px 20px}
 .composer .box{max-width:860px;margin:0 auto;background:#0c0c0c;border:1px solid var(--line-gold);border-radius:20px;padding:12px;box-shadow:0 0 0 6px rgba(227,196,107,.03)}
@@ -141,6 +180,7 @@ body{height:100vh;height:100dvh;overflow:hidden}
         <section class="welcome" id="welcome">
           <h1><span id="greeting">Good evening</span>. <span class="gold-text">What are we deciding today?</span></h1>
           <p>One brief. BLACK routes it to the right intelligence engine.</p>
+          <div class="ws" id="ws" aria-label="Command Workspace"></div>
           <div class="tiles">
             <button class="tile" data-prompt="Prepare a one-page board briefing on our growth strategy for next quarter: priorities, risks and the decisions we need."><strong>Board briefing</strong><span>One-page executive summary with decisions needed</span></button>
             <button class="tile" data-prompt="Run a market scan for AI services for small businesses in the US: trends, competitor moves and where the opportunity is."><strong>Market scan</strong><span>Trends, competitor moves and openings</span></button>
@@ -177,6 +217,7 @@ body{height:100vh;height:100dvh;overflow:hidden}
 </div>
 
 <script src="config.js"></script>
-<script src="assets/app.js"></script>
+<script src="assets/workspace.js?v=1"></script>
+<script src="assets/app.js?v=3"></script>
 </body>
 </html>

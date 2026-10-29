@@ -9,7 +9,8 @@ Static front end for BLACK™, the dark-and-gold executive edition of GetService
 | `config.js` | Runtime config (`apiBase`, `applicationId`, `studioUrl`) |
 | `assets/black.css` | Shared dark + gold design tokens and components |
 | `assets/unlock.js` | Unlock flow (preview access; billing comes later) |
-| `assets/app.js` | Console logic; calls `POST /v1/responses` |
+| `assets/app.js` | Console logic; calls `POST /v1/responses` (streamed) and shows the Live Engines panel |
+| `assets/workspace.js` / `workspace.css` | Command Workspace on the console home: live slides for net worth, stocks, crypto, strategic portfolio, allocation, assets, meetings and statements, activity (demo data) |
 | `functions/v1/responses.js` | Live gateway (Claude, GPT, Gemini, Perplexity, Grok) |
 
 ## How the unlock works today
@@ -23,6 +24,9 @@ Static front end for BLACK™, the dark-and-gold executive edition of GetService
 - Routing follows RAMBO's rules: classify the task, pick the engine, fall back to the next one if it fails.
   Code goes to GPT, strategy and writing to Claude, market research to Perplexity then Grok, and extraction to Gemini.
 - **Executive** mode runs up to three engines in parallel. Claude merges their answers and flags where they disagree.
+- **Live stream:** POST with `"stream": true` returns Server-Sent Events (`route`, `engine`, `delta`, `switch`, `synth`, `done`, `error`) so the console shows each engine working, model switches and text as it is written.
+- Each engine gets 45s in a live brief. A slow engine is skipped (or kept as a partial answer) instead of failing the brief. Empty answers are dropped before synthesis.
+- Synthesis uses the Smart model tier for speed. Set `SYNTH_TIER=deep` to use the Deep tier.
 - Add these secrets in Cloudflare (Pages > black-edition > Settings > Variables and secrets). Any engine without a key is skipped.
   - `BLACK_ACCESS_CODE` (required)
   - `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `PERPLEXITY_API_KEY`, `XAI_API_KEY`
