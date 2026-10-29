@@ -16,7 +16,7 @@
     [/\b(debug|error|exception|stack trace|fails?)\b/i, "debugging"],
     [/\b(code|typescript|javascript|python|api|function|class)\b/i, "coding"],
     [/\b(architecture|system design|database schema|microservice)\b/i, "architecture"],
-    [/\b(latest|current(ly)?|today|this (week|month|quarter|year)|news|right now|stock price|share price|exchange rate|in 20\d\d|20\d\d (sales|results|revenue|deliveries|numbers))\b/i, "live_research"],
+    [/\b(latest|current(ly)?|today|tonight|tomorrow'?s? (weather|forecast)|this (week|month|quarter|year)|news|right now|weather|forecast|temperature|rain|snow|stock price|share price|exchange rate|flight status|in 20\d\d|20\d\d (sales|results|revenue|deliveries|numbers))\b/i, "live_research"],
     [/\b(seo|keyword|meta description|search ranking)\b/i, "seo_content"],
     [/\b(product|supplier|listing|sku|catalog)\b/i, "product_research"],
     [/\b(market|competitor|trend)\b/i, "market_analysis"],

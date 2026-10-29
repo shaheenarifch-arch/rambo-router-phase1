@@ -38,7 +38,7 @@ const RULES = [
   [/\b(code|typescript|javascript|python|api|function|class)\b/i, "coding"],
   [/\b(architecture|system design|database schema|microservice)\b/i, "architecture"],
   // Current facts and figures go to the live-web engines instead of model memory.
-  [/\b(latest|current(ly)?|today|this (week|month|quarter|year)|news|right now|stock price|share price|exchange rate|in 20\d\d|20\d\d (sales|results|revenue|deliveries|numbers))\b/i, "live_research"],
+  [/\b(latest|current(ly)?|today|tonight|tomorrow'?s? (weather|forecast)|this (week|month|quarter|year)|news|right now|weather|forecast|temperature|rain|snow|stock price|share price|exchange rate|flight status|in 20\d\d|20\d\d (sales|results|revenue|deliveries|numbers))\b/i, "live_research"],
   [/\b(seo|keyword|meta description|search ranking)\b/i, "seo_content"],
   [/\b(product|supplier|listing|sku|catalog)\b/i, "product_research"],
   [/\b(market|competitor|trend)\b/i, "market_analysis"],
@@ -121,7 +121,11 @@ export async function onRequestPost({ request, env, waitUntil }) {
 
   const mode = ["fast", "smart", "deep", "executive"].includes(body.mode) ? body.mode : "smart";
   const lastUser = messages[messages.length - 1].content;
-  const taskType = TASKS.has(body.taskType) ? body.taskType : classify(lastUser);
+  // The gateway's own rules win for briefs that need the live web, so a browser with an older
+  // classifier (cached app.js) can't send a website or weather brief to a model without web access.
+  const serverTask = classify(lastUser);
+  const taskType = serverTask === "web_lookup" || serverTask === "live_research" ? serverTask
+    : TASKS.has(body.taskType) ? body.taskType : serverTask;
   const tier = mode === "executive" ? "deep" : mode;
   const order = (ROUTES[taskType] || ROUTES.general_chat).filter((e) => available.includes(e));
   // "What does Perplexity think?" -> that engine answers first.
