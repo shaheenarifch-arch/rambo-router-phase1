@@ -139,7 +139,7 @@
         "</div>" +
       "</div>" +
     "</div>" +
-    '<div class="ws-upload" role="note"><span><b>You\u2019re seeing test data.</b> Upload your files (Excel or CSV: statements, portfolios, holdings) with the \ud83d\udcce paperclip to see your real-time data.</span>' +
+    '<div class="ws-upload" role="status"><span class="ws-info" aria-hidden="true">i</span><span><b>You\u2019re seeing test data.</b> Upload your files (Excel or CSV: statements, portfolios, holdings) with the \ud83d\udcce paperclip to see your real-time data.</span>' +
       '<button type="button" id="ws-upload-btn">\ud83d\udcce Upload files</button></div>';
 
   var $ = function (id) { return document.getElementById(id); };
