@@ -162,6 +162,12 @@ body{height:100vh;height:100dvh;overflow:hidden}
 @media(max-width:640px){.eng{grid-template-columns:12px 1fr auto 46px;row-gap:2px}.eng .model{grid-column:2/-1;grid-row:2}.eng .stat{display:none}}
 /* Composer */
 .composer{padding:12px 22px 20px}
+/* Quick prompts: always above the brief box */
+.quick{max-width:860px;margin:0 auto 10px;display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:2px 2px 2px;-webkit-mask-image:linear-gradient(90deg,#000 92%,transparent);mask-image:linear-gradient(90deg,#000 92%,transparent)}
+.quick::-webkit-scrollbar{display:none}
+.quick button{flex:0 0 auto;font-size:13px;color:#cfcabf;border:1px solid var(--line);background:rgba(255,255,255,.03);border-radius:999px;padding:7px 13px;white-space:nowrap;transition:border-color .2s,color .2s,background .2s}
+.quick button:hover,.quick button:focus-visible{border-color:var(--line-gold);color:var(--gold);background:rgba(227,196,107,.06)}
+.quick button:disabled{opacity:.45;cursor:not-allowed}
 .composer .box{max-width:860px;margin:0 auto;background:#0c0c0c;border:1px solid var(--line-gold);border-radius:20px;padding:12px;box-shadow:0 0 0 6px rgba(227,196,107,.03)}
 .composer textarea{width:100%;resize:none;background:transparent;border:0;outline:0;color:var(--text);font:inherit;font-size:16px;line-height:1.5;padding:6px 8px;max-height:220px;min-height:52px}
 .composer .row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:6px}
@@ -239,6 +245,16 @@ body{height:100vh;height:100dvh;overflow:hidden}
     </div>
 
     <form class="composer" id="composer" autocomplete="off">
+      <div class="quick" id="quick" role="toolbar" aria-label="Quick prompts">
+        <button type="button" data-prompt="Prepare a one-page board briefing on our growth strategy for next quarter: priorities, risks and the decisions we need.">📊 Board briefing</button>
+        <button type="button" data-prompt="Run a market scan for AI services for small businesses in the US: trends, competitor moves and where the opportunity is.">🔎 Market scan</button>
+        <button type="button" data-prompt="Build a 90-day growth plan with weekly milestones, owners and the metrics that prove it's working.">🎯 90-day plan</button>
+        <button type="button" data-mode="executive" data-prompt="Should we launch a premium tier now or wait two quarters? Give the case for each and a recommendation.">⚖️ Executive decision</button>
+        <button type="button" data-prompt="What are the latest news and moves in my industry this week?">📰 Latest news</button>
+        <button type="button" data-prompt="What's on my calendar tomorrow?">🗓️ My day tomorrow</button>
+        <button type="button" data-prompt="Schedule a 30-minute call tomorrow at 10am with " data-cursor="end">➕ Schedule a meeting</button>
+        <button type="button" data-attach="1">📎 Analyze a spreadsheet</button>
+      </div>
       <div class="box">
         <label for="prompt" class="sr-only" style="position:absolute;left:-9999px">Your brief</label>
         <div class="attach-tray" id="attach-tray" hidden aria-live="polite"></div>
@@ -295,6 +311,6 @@ body{height:100vh;height:100dvh;overflow:hidden}
 <script src="assets/workspace.js?v=2"></script>
 <script src="assets/attach.js?v=1"></script>
 <script src="assets/calendar.js?v=1"></script>
-<script src="assets/app.js?v=9"></script>
+<script src="assets/app.js?v=10"></script>
 </body>
 </html>

@@ -79,6 +79,15 @@
       el.prompt.value = t.dataset.prompt; onInput(); el.prompt.focus();
     });
   });
+  // Quick prompts above the brief box: fill the box (or open the file picker); the user presses Enter to send.
+  document.querySelectorAll("#quick button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      if (b.dataset.attach) { var a = document.getElementById("attach-btn"); if (a) a.click(); return; }
+      if (b.dataset.mode) setMode(b.dataset.mode);
+      el.prompt.value = b.dataset.prompt; onInput(); el.prompt.focus();
+      var n = el.prompt.value.length; try { el.prompt.setSelectionRange(n, n); } catch (e) {}
+    });
+  });
   el.prompt.addEventListener("input", onInput);
   el.prompt.addEventListener("keydown", function (e) {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); el.form.requestSubmit(); }
