@@ -88,6 +88,7 @@
   el.railToggle.addEventListener("click", function () { el.rail.classList.contains("open") ? closeRail() : openRail(); });
   el.scrim.addEventListener("click", closeRail);
   renderHistory();
+  if (window.BLACK_ATTACH) window.BLACK_ATTACH.onChange(function () { onInput(); });
   el.prompt.focus();
 
   function setMode(m) {
@@ -98,7 +99,8 @@
     var v = el.prompt.value;
     el.prompt.style.height = "auto";
     el.prompt.style.height = Math.min(el.prompt.scrollHeight, 220) + "px";
-    el.send.disabled = busy || !v.trim();
+    var att = window.BLACK_ATTACH && window.BLACK_ATTACH.current();
+    el.send.disabled = busy || (!v.trim() && !att);
     el.detect.innerHTML = v.trim() ? "Detected: <b>" + LABELS[classify(v)] + "</b>" : "";
   }
   function openRail() { el.rail.classList.add("open"); el.scrim.classList.add("open"); el.railToggle.setAttribute("aria-expanded", "true"); }
@@ -115,7 +117,7 @@
     var b = briefs.find(function (x) { return x.id === id; }); if (!b) return;
     current = b; setMode(b.mode || "smart"); el.thread.innerHTML = ""; el.welcome.style.display = "none";
     if (window.BLACK_WORKSPACE) window.BLACK_WORKSPACE.pause();
-    b.messages.forEach(function (m) { m.role === "user" ? addUser(m.content) : addAnswer(m.meta || {}, m.content); });
+    b.messages.forEach(function (m) { m.role === "user" ? addUser(m.display || m.content, m.file) : addAnswer(m.meta || {}, m.content); });
     renderHistory(); closeRail(); scrollEnd();
   }
   function renderHistory() {
@@ -132,18 +134,22 @@
 
   // ---------- send ----------
   function submit() {
-    var text = el.prompt.value.trim(); if (!text || busy) return;
+    var att = window.BLACK_ATTACH && window.BLACK_ATTACH.current();
+    var text = el.prompt.value.trim(); if ((!text && !att) || busy) return;
+    if (!text) text = "Analyze this spreadsheet: the key totals, trends and anything that needs my attention.";
+    var content = att ? text + "\n\n" + window.BLACK_ATTACH.promptBlock() : text;
     if (!current) {
-      current = { id: String(Date.now()), title: text.slice(0, 60), mode: mode, messages: [] };
+      current = { id: String(Date.now()), title: (att && !el.prompt.value.trim() ? att.name : text).slice(0, 60), mode: mode, messages: [] };
       briefs.unshift(current);
     }
     current.mode = mode;
-    current.messages.push({ role: "user", content: text });
+    current.messages.push(att ? { role: "user", content: content, display: text, file: att } : { role: "user", content: text });
     save(); renderHistory();
     el.welcome.style.display = "none";
     if (window.BLACK_WORKSPACE) window.BLACK_WORKSPACE.pause();
-    addUser(text);
+    addUser(text, att);
     el.prompt.value = "";
+    if (att) window.BLACK_ATTACH.clear();
     dispatch(classify(text));
   }
 
@@ -175,7 +181,7 @@
       mode: mode,
       taskType: taskType,
       stream: true,
-      messages: current.messages.map(function (m) { return { role: m.role, content: m.content }; }),
+      messages: outgoing(current.messages),
       output: { format: "markdown" }
     };
     return fetch(API + "/v1/responses", {
@@ -241,6 +247,15 @@
       }
     };
   }
+  // Keeps briefs small: only the most recent spreadsheet's data is sent in full.
+  function outgoing(msgs) {
+    var last = -1;
+    msgs.forEach(function (m, i) { if (m.file) last = i; });
+    return msgs.map(function (m, i) {
+      if (m.file && i !== last) return { role: m.role, content: (m.display || "") + "\n\n[Earlier attachment: " + m.file.name + "]" };
+      return { role: m.role, content: m.content };
+    });
+  }
   function errorText(status, j) {
     if (status === 401 || status === 403) { LIVE = false; setStatus(); return "Your access code wasn't accepted. Tap the status badge at the top to enter it again."; }
     if (status === 413) return "That brief is too long. Shorten it or start a new brief.";
@@ -274,9 +289,14 @@
   }
 
   // ---------- render ----------
-  function addUser(text) {
+  function addUser(text, file) {
     var d = document.createElement("div"); d.className = "msg user";
     var b = document.createElement("div"); b.className = "bubble"; b.textContent = text;
+    if (file) {
+      var f = document.createElement("div"); f.className = "bubble-file";
+      f.textContent = "▦ " + file.name + " · " + file.sheets + " sheet" + (file.sheets > 1 ? "s" : "") + " · " + Number(file.rows).toLocaleString() + " rows";
+      b.insertBefore(f, b.firstChild);
+    }
     d.appendChild(b); el.thread.appendChild(d); scrollEnd();
   }
   var STATUS = { queued: "Queued", thinking: "Thinking…", writing: "Writing…", done: "Done", failed: "Failed", skipped: "Standby" };

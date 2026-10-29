@@ -68,7 +68,7 @@ const REASON = {
 const SYSTEM =
   "You are BLACK, the executive AI of GetServices.ai. Answer for a busy executive: lead with the answer or recommendation, " +
   "then the reasoning, risks and next steps. Use short markdown sections (### headings) and bullet points. Be specific and concise. " +
-  "If you are unsure or lack current data, say so plainly instead of guessing.";
+  "If you are unsure or lack current data, say so plainly instead of guessing. If the brief includes an [Attached spreadsheet], analyze that data: use its column totals, show key tables and one chart (a fenced chart JSON block) built from it.";
 
 // Fast and Smart: a quick, direct answer, not a report. Deep and Executive keep the full SYSTEM style.
 const QUICK =
@@ -83,11 +83,13 @@ const QUICK =
   "Mark estimates as estimates in the title.\n" +
   "5) If sources help, a final line 'Sources:' with up to 3 markdown links [title](https://...) to real, well-known pages you are confident exist; never invent URLs.\n" +
   "Keep the text under 120 words. No headings, tables, mockups or ASCII diagrams unless the user explicitly asks for detail. " +
+  "If the brief includes an [Attached spreadsheet], base the data cards, chart and figures only on that data (use the column totals for full-sheet numbers), " +
+  "and add a short markdown table of the most important rows. " +
   "If you are unsure or lack current data, say so plainly instead of guessing.";
 const systemFor = (mode) => (mode === "fast" || mode === "smart" ? QUICK : SYSTEM);
 
 const MAX_MESSAGES = 12;
-const MAX_CHARS = 24000;
+const MAX_CHARS = 40000; // room for one attached spreadsheet summary (~11K chars) plus history
 const TIMEOUT_MS = 55000;
 const ENGINE_TIMEOUT_MS = 45000;   // per engine in a live (streamed) brief; a slow engine is skipped, not fatal
 const SYNTH_TIMEOUT_MS = 50000;
