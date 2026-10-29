@@ -12,6 +12,8 @@ Static front end for BLACK™, the dark-and-gold executive edition of GetService
 | `assets/app.js` | Console logic; calls `POST /v1/responses` (streamed) and shows the Live Engines panel |
 | `assets/workspace.js` / `workspace.css` | Command Workspace on the console home: live slides for net worth, stocks, crypto, strategic portfolio, allocation, assets, meetings and statements, activity (demo data) |
 | `assets/attach.js` | Excel/CSV upload: read in the browser with SheetJS (cdnjs, loaded on first use); a compact data summary is added to the brief. Nothing is stored server side |
+| `assets/calendar.js` / `calendar.css` | Sign-in with the GetServices account, scheduling confirmation cards, calendar drawer, calendar context for briefs |
+| `functions/v1/me/[[path]].js` | Account + BLACK Calendar API (D1): login proxy to ATLAS, events, scheduling proposals, iCal import, subscribe feed |
 | `functions/v1/responses.js` | Live gateway (Claude, GPT, Gemini, Perplexity, Grok) |
 
 ## How the unlock works today
@@ -45,3 +47,14 @@ Static front end for BLACK™, the dark-and-gold executive edition of GetService
 cd apps/black && python3 -m http.server 8090
 # open http://localhost:8090
 ```
+
+## BLACK Calendar (setup)
+1. **D1 database:** Cloudflare → Storage & Databases → D1 → Create `black-calendar`. Then Pages → black-edition → Settings → Bindings → add **D1 database**, variable name `BLACK_DB`. Tables are created automatically on first use.
+2. **Secret `TOKEN_KEY`:** any long random string. It encrypts each user's private iCal address.
+3. **Optional `ATLAS_API_URL`:** defaults to the live ATLAS API.
+4. Redeploy.
+- Sign-in uses the GetServices (ATLAS) account. Email and password go through `/v1/me/login`, server to server.
+- Google and Microsoft sign-in need `https://black.getservices.ai` in ATLAS's allowed origins (atlas-api PR).
+- Scheduling briefs ("schedule…", "move…", "cancel…") open a confirmation card. Nothing is saved until **Create**.
+- Calendar questions ("what's on tomorrow?") send the next 14 days of events to the engines as context.
+- Not included yet: email invites (Phase 2) and reminders (Phase 3).

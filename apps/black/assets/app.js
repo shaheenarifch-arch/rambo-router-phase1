@@ -137,19 +137,41 @@
     var att = window.BLACK_ATTACH && window.BLACK_ATTACH.current();
     var text = el.prompt.value.trim(); if ((!text && !att) || busy) return;
     if (!text) text = "Analyze this spreadsheet: the key totals, trends and anything that needs my attention.";
-    var content = att ? text + "\n\n" + window.BLACK_ATTACH.promptBlock() : text;
+    var cal = !att && window.BLACK_CAL;
+    var scheduling = cal && window.BLACK_CAL.isScheduling(text);
+    var calQuestion = cal && !scheduling && window.BLACK_CAL.signedIn() && window.BLACK_CAL.isCalendarQuestion(text);
     if (!current) {
       current = { id: String(Date.now()), title: (att && !el.prompt.value.trim() ? att.name : text).slice(0, 60), mode: mode, messages: [] };
       briefs.unshift(current);
     }
     current.mode = mode;
-    current.messages.push(att ? { role: "user", content: content, display: text, file: att } : { role: "user", content: text });
+    var msg = att ? { role: "user", content: text + "\n\n" + window.BLACK_ATTACH.promptBlock(), display: text, file: att } : { role: "user", content: text };
+    current.messages.push(msg);
     save(); renderHistory();
     el.welcome.style.display = "none";
     if (window.BLACK_WORKSPACE) window.BLACK_WORKSPACE.pause();
     addUser(text, att);
     el.prompt.value = "";
     if (att) window.BLACK_ATTACH.clear();
+
+    // "Schedule / move / cancel a meeting" -> calendar confirmation card instead of an engine answer.
+    if (scheduling) {
+      onInput();
+      window.BLACK_CAL.propose(text, function (summary) {
+        if (!summary) return;
+        current.messages.push({ role: "assistant", content: summary, meta: { mode: "calendar", reasons: ["BLACK_CALENDAR"] } });
+        save();
+      });
+      return;
+    }
+    // "What's on tomorrow?" -> the engines also see the user's real calendar.
+    if (calQuestion) {
+      busy = true; onInput();
+      window.BLACK_CAL.contextBlock().then(function (block) {
+        if (block) { msg.content = text + "\n\n" + block; msg.display = text; save(); }
+      }).finally(function () { busy = false; dispatch(classify(text)); });
+      return;
+    }
     dispatch(classify(text));
   }
 
