@@ -219,7 +219,10 @@
     var d = cardShell("Calendar"), box = d.querySelector(".cal-in");
     box.innerHTML = "<p>BLACK can\u2019t see your calendar yet. Connect your calendar, or upload a calendar file with the \ud83d\udcce paperclip, to see your meetings.</p>" +
       '<div class="cal-acts"><button type="button" class="btn btn-gold btn-sm" data-connect>Connect calendar</button>' +
-      '<button type="button" class="btn btn-ghost btn-sm" data-upload>\ud83d\udcce Upload calendar file</button></div>';
+      '<button type="button" class="btn btn-ghost btn-sm" data-upload>\ud83d\udcce Upload calendar file</button></div>' +
+      '<p class="cal-help"><b>Connect</b> shows your Google or Outlook calendar live (paste its private iCal address in calendar settings). ' +
+      '<b>Upload</b> reads a one-time .ics, Excel or CSV export.<br>' + ((window.BLACK_ATTACH && window.BLACK_ATTACH.helpHtml) || "") +
+      ' \u00b7 <a href="https://support.google.com/calendar/answer/37648?hl=en" target="_blank" rel="noopener">Find Google\u2019s private iCal address</a></p>';
     box.querySelector("[data-connect]").addEventListener("click", function () {
       if (token) return openDrawer();
       pendingAfterSignIn = function () { openDrawer(); };

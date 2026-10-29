@@ -12,7 +12,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/black.css?v=3">
 <link rel="stylesheet" href="assets/workspace.css?v=4">
-<link rel="stylesheet" href="assets/calendar.css?v=1">
+<link rel="stylesheet" href="assets/calendar.css?v=2">
 <script>
   // Preview gate: send visitors without access back to the unlock screen.
   try { if (localStorage.getItem("black.access") !== "preview") location.replace("index.html?unlock=1"); } catch (e) {}
@@ -261,7 +261,7 @@ body{height:100vh;height:100dvh;overflow:hidden}
       <div class="box">
         <label for="prompt" class="sr-only" style="position:absolute;left:-9999px">Your brief</label>
         <div class="attach-tray" id="attach-tray" hidden aria-live="polite"></div>
-        <textarea id="prompt" rows="2" placeholder="Brief BLACK on anything, or attach an Excel file…"></textarea>
+        <textarea id="prompt" rows="2" placeholder="Brief BLACK on anything, or attach Excel, CSV or a calendar (.ics)…"></textarea>
         <div class="row">
           <div class="modes" role="group" aria-label="Mode">
             <button type="button" data-m="fast" aria-pressed="false">Fast</button>
@@ -271,8 +271,8 @@ body{height:100vh;height:100dvh;overflow:hidden}
           </div>
           <div class="meta">
             <span class="detect" id="detect"></span>
-            <input type="file" id="file-input" accept=".xlsx,.xlsm,.xls,.csv" hidden>
-            <button type="button" class="attach" id="attach-btn" aria-label="Attach Excel or CSV file" title="Attach Excel or CSV (max 5 MB)">
+            <input type="file" id="file-input" accept=".xlsx,.xlsm,.xls,.csv,.ics,text/calendar" hidden>
+            <button type="button" class="attach" id="attach-btn" aria-label="Attach Excel, CSV or calendar file" title="Attach Excel, CSV or calendar .ics (max 5 MB)">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l9-9a3.7 3.7 0 0 1 5.2 5.2l-9 9a1.8 1.8 0 0 1-2.6-2.6l8.3-8.3"/></svg>
             </button>
             <button class="send" id="send" type="submit" aria-label="Send brief" disabled>
@@ -312,8 +312,8 @@ body{height:100vh;height:100dvh;overflow:hidden}
 
 <script src="config.js"></script>
 <script src="assets/workspace.js?v=5"></script>
-<script src="assets/attach.js?v=1"></script>
-<script src="assets/calendar.js?v=2"></script>
-<script src="assets/app.js?v=15"></script>
+<script src="assets/attach.js?v=2"></script>
+<script src="assets/calendar.js?v=3"></script>
+<script src="assets/app.js?v=16"></script>
 </body>
 </html>
