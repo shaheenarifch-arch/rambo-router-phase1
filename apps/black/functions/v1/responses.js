@@ -24,7 +24,7 @@ const DEFAULT_MODELS = {
   anthropic: { fast: "claude-haiku-5-5", smart: "claude-haiku-5-5", deep: "claude-opus-5-5", synth: "claude-sonnet-5-5" },
   openai: { fast: "gpt-5.4-mini", smart: "gpt-5.6-sol", deep: "gpt-5.6-sol" },
   gemini: { fast: "gemini-4-argon", smart: "gemini-4-argon", deep: "gemini-4-argon" },
-  perplexity: { fast: "fast", smart: "medium", deep: "high" }, // Agent API "effort" levels
+  perplexity: { fast: "fast", smart: "fast", deep: "high" }, // Agent API "effort" levels; "medium" took ~27s for a news brief
   xai: { fast: "grok-4-1-fast-non-reasoning", smart: "grok-4.6", deep: "grok-4.6" }
 };
 
@@ -255,10 +255,22 @@ async function call(provider, env, tier, messages, sys = SYSTEM, web = false) {
 }
 
 function agentText(j) {
-  if (typeof j.output_text === "string") return j.output_text;
-  const parts = [];
-  (j.output || []).forEach((o) => (o.content || []).forEach((c) => { if (typeof c.text === "string") parts.push(c.text); }));
-  return parts.join("\n");
+  let text = typeof j.output_text === "string" ? j.output_text : "";
+  const links = [];
+  const addLink = (u, t) => { if (typeof u === "string" && /^https?:\/\//.test(u) && !links.some((l) => l.url === u)) links.push({ url: u, title: String(t || "").trim() }); };
+  (j.output || []).forEach((o) => (o.content || []).forEach((c) => {
+    if (!text && typeof c.text === "string") text += (text ? "\n" : "") + c.text;
+    (c.annotations || []).forEach((a) => addLink(a.url || (a.url_citation && a.url_citation.url), a.title || (a.url_citation && a.url_citation.title)));
+  }));
+  if (!text) (j.output || []).forEach((o) => (o.content || []).forEach((c) => { if (typeof c.text === "string") text += (text ? "\n" : "") + c.text; }));
+  (j.citations || []).forEach((c) => (typeof c === "string" ? addLink(c) : addLink(c && c.url, c && c.title)));
+  (j.search_results || []).forEach((r) => addLink(r && r.url, r && r.title));
+  // Drop raw citation markers like [web:12] or [3]; add clickable sources instead.
+  text = text.replace(/\s*\[(web:)?\d+(,\s*(web:)?\d+)*\]/gi, "");
+  if (links.length && !/\bSources?:/i.test(text)) {
+    text += "\n\nSources: " + links.slice(0, 3).map((l) => "[" + (l.title || l.url.replace(/^https?:\/\/(www\.)?/, "").split("/")[0]).replace(/[\[\]]/g, "").slice(0, 70) + "](" + l.url + ")").join(" · ");
+  }
+  return text;
 }
 
 async function post(url, headers, payload) {
