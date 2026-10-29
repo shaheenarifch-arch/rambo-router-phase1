@@ -99,18 +99,43 @@
     { id: "overview", doc: "Morning Brief \u00b7 " + TODAY, k: "Executive Summary", h: "Net Worth Today", t: "Net worth", tasks: [["Gemini", "Consolidating 9 accounts"], ["GPT", "Computing today's P&L"], ["Claude", "Writing your morning summary"]] },
     { id: "stocks", doc: "Equities \u00b7 " + TODAY, k: "Market Positions", h: "Stocks", t: "Portfolio", tasks: [["RAMBO", "Connecting market feed"], ["GPT", "Valuing 4 positions"], ["Grok", "Scanning price signals"]] },
     { id: "crypto", doc: "Digital Assets \u00b7 " + TODAY, k: "Wallets & Exchanges", h: "Crypto", t: "Crypto", tasks: [["RAMBO", "Syncing exchange and cold vault"], ["Gemini", "Reconciling 3 wallets"], ["Grok", "Watching volatility"]] },
+    { id: "strategic", doc: "Strategic Portfolio \u00b7 FY27", k: "Strategic Portfolio", h: "Initiative Scorecard", t: "Strategy", tasks: [["Claude", "Mapping initiatives to strategy"], ["GPT", "Scoring value against spend"], ["Gemini", "Flagging risks"]] },
+    { id: "alloc", doc: "Allocation Review \u00b7 " + TODAY, k: "Portfolio Allocation", h: "Target vs Actual", t: "Allocation", tasks: [["GPT", "Measuring drift from targets"], ["Claude", "Drafting rebalance options"]] },
+    { id: "assets", doc: "Asset Register \u00b7 Q3", k: "Hard & Private Assets", h: "Asset Register", t: "Assets", tasks: [["Gemini", "Reading valuations and appraisals"], ["Perplexity", "Checking market comparables"]] },
     { id: "today", doc: "Today \u00b7 " + TODAY, k: "Meetings & Statements", h: "Your Day", t: "Your day", tasks: [["Claude", "Preparing meeting briefs"], ["Gemini", "Parsing statements"], ["RAMBO", "Filing documents"]] },
     { id: "activity", doc: "Agent Activity \u00b7 Live", k: "Live Activity", h: "Agents at Work", t: "Activity", tasks: [["RAMBO", "Streaming agent activity"]] }
   ];
   var viewing = false;
+
+  // ---------- the user's name ("Shaheen's Command Workspace"), remembered on this device and with their account ----------
+  var NAME_KEY = "black.name", nameListeners = [];
+  function cleanName(n) { return String(n || "").replace(/[<>"`]/g, "").replace(/\s+/g, " ").trim().slice(0, 40); }
+  function getName() { try { return cleanName(localStorage.getItem(NAME_KEY)); } catch (e) { return ""; } }
+  function storeName(n, sync) {
+    n = cleanName(n);
+    try { n ? localStorage.setItem(NAME_KEY, n) : localStorage.removeItem(NAME_KEY); } catch (e) {}
+    if (sync && window.BLACK_CAL && window.BLACK_CAL.saveName) window.BLACK_CAL.saveName(n);
+    nameListeners.forEach(function (f) { f(n); });
+  }
+  window.BLACK_NAME = {
+    get: getName,
+    set: function (n) { storeName(n, true); },
+    // The account's saved name wins when signing in on a new device; a name typed before signing in is copied up.
+    fromAccount: function (n) { n = cleanName(n); if (n && n !== getName()) storeName(n, false); else if (!n && getName() && window.BLACK_CAL) window.BLACK_CAL.saveName(getName()); },
+    onChange: function (f) { nameListeners.push(f); }
+  };
   var cur = 0, phase = "build", stepN = 0, holdTicks = 0, paused = false, userPaused = false, hidden = false, t0 = Date.now(), n = 0;
   var TICK = 250, STEP_TICKS = 3, HOLD_TICKS = 28; // 0.75s per agent step, ~7s live per slide
 
   root.innerHTML =
     '<div class="ws-top">' +
-      '<span class="ws-kicker">Command Workspace</span>' +
-      '<div class="ws-tabs" role="tablist" aria-label="Workspace views" id="ws-tabs">' +
-        SLIDES.map(function (x, i) { return '<button role="tab" type="button" data-i="' + i + '">' + esc(x.t) + "</button>"; }).join("") +
+      '<div class="ws-who" id="ws-who"></div>' +
+      '<div class="ws-nav">' +
+        '<button type="button" class="ws-arrow" id="ws-prev" aria-label="Previous view" title="Previous view (\u2190)">\u2039</button>' +
+        '<div class="ws-tabs" role="tablist" aria-label="Workspace views" id="ws-tabs">' +
+          SLIDES.map(function (x, i) { return '<button role="tab" type="button" data-i="' + i + '">' + esc(x.t) + "</button>"; }).join("") +
+        "</div>" +
+        '<button type="button" class="ws-arrow" id="ws-next" aria-label="Next view" title="Next view (\u2192)">\u203a</button>' +
       "</div>" +
       '<button type="button" class="ws-play" id="ws-play" aria-label="Pause slides">❚❚</button>' +
     "</div>" +
@@ -128,8 +153,34 @@
       '<button type="button" id="ws-upload-btn">\ud83d\udcce Upload files</button></div>';
 
   var $ = function (id) { return document.getElementById(id); };
+  function possessive(n) { return n + (/s$/i.test(n) ? "\u2019" : "\u2019s"); }
+  function renderWho(asking) {
+    var n = getName(), box = $("ws-who");
+    if (n && !asking) {
+      box.innerHTML = '<span class="ws-kicker"><span class="ws-name"></span> Command Workspace</span>' +
+        '<button type="button" class="ws-name-edit" id="ws-name-edit" aria-label="Change your name" title="Change what BLACK calls you">\u270e</button>';
+      box.querySelector(".ws-name").textContent = possessive(n);
+      $("ws-name-edit").addEventListener("click", function () { renderWho(true); });
+      return;
+    }
+    box.innerHTML = '<form class="ws-name-ask" id="ws-name-form"><label for="ws-name-in">What should BLACK call you?</label>' +
+      '<input id="ws-name-in" maxlength="40" autocomplete="given-name" placeholder="Your first name" required>' +
+      '<button type="submit">Save</button>' + (n ? '<button type="button" class="ws-name-x" id="ws-name-x" aria-label="Cancel">\u2715</button>' : "") +
+      '<small>Remembered on this device, and with your GetServices account when you sign in.</small></form>';
+    var inp = $("ws-name-in"); inp.value = n;
+    if (asking) setTimeout(function () { inp.focus(); inp.select(); }, 0);
+    $("ws-name-form").addEventListener("submit", function (e) { e.preventDefault(); var v = cleanName(inp.value); if (v) { window.BLACK_NAME.set(v); } });
+    if ($("ws-name-x")) $("ws-name-x").addEventListener("click", function () { renderWho(false); });
+  }
+  renderWho(false);
+  window.BLACK_NAME.onChange(function () { renderWho(false); });
   $("ws-upload-btn").addEventListener("click", function () { var b = document.getElementById("attach-btn"); if (b) { b.focus(); b.click(); } });
   $("ws-tabs").addEventListener("click", function (e) { var b = e.target.closest("button"); if (b) go(+b.dataset.i); });
+  $("ws-prev").addEventListener("click", function () { go((cur - 1 + SLIDES.length) % SLIDES.length); });
+  $("ws-next").addEventListener("click", function () { go((cur + 1) % SLIDES.length); });
+  $("ws-tabs").addEventListener("keydown", function (e) {
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); go((cur + (e.key === "ArrowRight" ? 1 : -1) + SLIDES.length) % SLIDES.length); $("ws-tabs").children[cur].focus(); }
+  });
   $("ws-play").addEventListener("click", function () {
     userPaused = !userPaused;
     $("ws-play").textContent = userPaused ? "▶" : "❚❚";
@@ -169,6 +220,9 @@
     stocks: "Your stock positions with live price, today\u2019s move and position value. Tap a row for the full holding. " + DEMO_HELP,
     crypto: "Your crypto wallets and exchange balances. Tap a row for the full holding. " + DEMO_HELP,
     today: "Today\u2019s meetings and the statements BLACK is reconciling. Connect your calendar from the Calendar button at the top. " + DEMO_HELP,
+    strategic: "Your strategic initiatives: status, budget used and value delivered so far. Tap a row for the full initiative. " + DEMO_HELP,
+    alloc: "How your money is split versus your target mix. The white line on each bar is the target; \u26a0 marks drift over half a point. " + DEMO_HELP,
+    assets: "Property, private funds and valuables, with how each value was set (estimate, appraisal or fund NAV). " + DEMO_HELP,
     activity: "What BLACK\u2019s agents did in the last 12 hours, newest first."
   };
   function view(list, i) {
@@ -177,7 +231,8 @@
     window.BLACK_VIEW.open(list, i, { onClose: function () { viewing = false; } });
   }
   function bvList(pairs) { return '<div class="bv-list">' + pairs.map(function (x) { return "<div><span>" + x[0] + "</span><b>" + x[1] + "</b></div>"; }).join("") + "</div>"; }
-  function goAct(i, label) { return { label: label || "Open full slide \u2192", run: function () { go(i); } }; }
+  function slideAt(id) { for (var j = 0; j < SLIDES.length; j++) if (SLIDES[j].id === id) return j; return 0; }
+  function goAct(i, label) { if (typeof i === "string") i = slideAt(i); return { label: label || "Open full slide \u2192", run: function () { go(i); } }; }
   function openSlides(i) {
     view(SLIDES.map(function (s, j) {
       return { kicker: s.doc, title: s.h, html: '<div class="ws-slide">' + build(j, 99, true) + "</div>", help: SLIDE_HELP[s.id], action: j === cur ? null : goAct(j, "Show on workspace \u2192") };
@@ -189,16 +244,16 @@
     var nw = function (v) { return money(v) + " \u00b7 " + (v / t.nw * 100).toFixed(1) + "%"; };
     view([
       { kicker: "Net worth", title: money(t.nw, "c"), html: '<p class="bv-sub">' + (t.pnl >= 0 ? "+" : "") + money(t.pnl, "c") + " today</p>" +
-          bvList([["Equities", nw(t.eq)], ["Crypto", nw(t.cr)], ["Hard & private", nw(t.hd)], ["Cash", nw(t.cash)]]), help: SLIDE_HELP.overview, action: goAct(0) },
+          bvList([["Equities", nw(t.eq)], ["Crypto", nw(t.cr)], ["Hard & private", nw(t.hd)], ["Cash", nw(t.cash)]]), help: SLIDE_HELP.overview, action: goAct("overview") },
       { kicker: "Today\u2019s P&L", title: (t.pnl >= 0 ? "+" : "") + money(t.pnl, "c"), html: '<p class="bv-sub">Biggest moves today, stocks and crypto</p>' +
           bvList(movers.map(function (x) { var d = (x.p - x.o) * x.q; return [x.s + " \u00b7 " + x.n, '<span class="' + (d >= 0 ? "up" : "down") + '">' + (d >= 0 ? "+" : "") + money(d) + " (" + pct(x) + ")</span>"]; })),
-        help: "Profit or loss since today\u2019s open across your stock and crypto positions. " + DEMO_HELP, action: goAct(1) },
+        help: "Profit or loss since today\u2019s open across your stock and crypto positions. " + DEMO_HELP, action: goAct("stocks") },
       { kicker: "Liquid cash", title: money(t.cash, "c"), html: '<p class="bv-sub">' + (t.cash / t.nw * 100).toFixed(1) + "% of net worth \u00b7 target 15%</p>" +
           bvList(statements.map(function (x) { return [x.n, x.p >= 100 ? (x.warn ? "\u26a0 " + x.warn : "\u2714 Reconciled") : "\u27f3 " + Math.round(x.p) + "%"]; })),
-        help: realCash ? "Closing balance from the bank statement you uploaded. Upload more statements to include other accounts." : "Cash you can use now, from your bank and brokerage cash balances. " + DEMO_HELP, action: goAct(3, "Open statements \u2192") },
+        help: realCash ? "Closing balance from the bank statement you uploaded. Upload more statements to include other accounts." : "Cash you can use now, from your bank and brokerage cash balances. " + DEMO_HELP, action: goAct("today", "Open statements \u2192") },
       { kicker: "BLACK agents", title: (3 + (cur % 3)) + " running", html: '<p class="bv-sub">2 need your approval</p>' +
           bvList(SLIDES[cur].tasks.map(function (x) { return [x[0], x[1]]; }).concat([["Needs approval", "Rebalance preview"], ["Needs approval", "Card statement \u00b7 1 item untagged"]])),
-        help: "The AI engines BLACK is running for you right now, and anything waiting for your OK.", action: goAct(4, "Open activity \u2192") }
+        help: "The AI engines BLACK is running for you right now, and anything waiting for your OK.", action: goAct("activity", "Open activity \u2192") }
     ], i);
   }
   function openRows(idx, g, r) {
@@ -209,7 +264,7 @@
         help: DEMO_HELP, action: { label: "Ask BLACK about " + x.s + " \u2192", run: function () { ask("What's the outlook for " + x.n + " (" + x.s + ") and should I change my position?"); } } };
     };
     if (s.id === "overview") items = [["Equities", t.eq], ["Crypto", t.cr], ["Hard & private", t.hd], ["Cash", t.cash]].map(function (x, j) {
-      return { kicker: "Net worth", title: x[0], html: '<div class="bv-big">' + money(x[1], "c") + '</div><p class="bv-sub">' + (x[1] / t.nw * 100).toFixed(1) + "% of net worth</p>", help: DEMO_HELP, action: [goAct(1), goAct(2), null, null][j] };
+      return { kicker: "Net worth", title: x[0], html: '<div class="bv-big">' + money(x[1], "c") + '</div><p class="bv-sub">' + (x[1] / t.nw * 100).toFixed(1) + "% of net worth</p>", help: DEMO_HELP, action: [goAct("stocks"), goAct("crypto"), goAct("assets"), goAct("alloc", "Open allocation \u2192")][j] };
     });
     else if (s.id === "stocks") items = stocks.map(function (x) { return hold(x, t.eq); });
     else if (s.id === "crypto") items = crypto.map(function (x) { return hold(x, t.cr); });
@@ -220,6 +275,18 @@
     else if (s.id === "today") items = statements.map(function (x) {
       return { kicker: "Statement", title: x.n, html: '<div class="bv-big">' + (x.p >= 100 ? "Reconciled" : Math.round(x.p) + "%") + '</div><p class="bv-sub">' + (x.warn ? "\u26a0 " + x.warn : x.p >= 100 ? "All items matched" : "BLACK is matching transactions") + "</p>",
         help: DEMO_HELP, action: { label: "\ud83d\udcce Upload a statement", run: function () { var b = document.getElementById("attach-btn"); if (b) b.click(); } } };
+    });
+    else if (s.id === "strategic") items = initiatives.map(function (x) {
+      return { kicker: "Strategic initiative", title: x.n, html: '<div class="bv-big">' + x.st + "</div>" + bvList([["Budget used", x.spend + "%"], ["Value delivered", x.value + "%"], ["Status", { g: "Green \u00b7 on track", a: "Amber \u00b7 at risk", r: "Red \u00b7 needs review" }[x.rag]]]),
+        help: SLIDE_HELP.strategic, action: { label: "Ask BLACK about " + x.n + " \u2192", run: function () { ask("Give me a status brief on " + x.n + ": risks, spend versus value, and what I should decide."); } } };
+    });
+    else if (s.id === "alloc") items = [["Equities", t.eq], ["Hard & private", t.hd], ["Crypto", t.cr], ["Cash", t.cash]].map(function (x) {
+      var a = x[1] / t.nw * 100, d = a - targets[x[0]];
+      return { kicker: "Allocation", title: x[0], html: '<div class="bv-big">' + a.toFixed(1) + '%</div><p class="bv-sub">Target ' + targets[x[0]] + "% \u00b7 " + (d > 0 ? "+" : "") + d.toFixed(1) + " pts</p>" + bvList([["Value", money(x[1], "c")], ["To reach target", (d > 0 ? "Reduce " : "Add ") + money(Math.abs(d) / 100 * t.nw)]]),
+        help: SLIDE_HELP.alloc, action: { label: "Ask BLACK to rebalance \u2192", run: function () { ask("Draft rebalance options to bring my allocation back to target, with the trade-offs."); } } };
+    });
+    else if (s.id === "assets") items = hard.map(function (x) {
+      return { kicker: "Asset", title: x.n, html: '<div class="bv-big">' + money(x.v, "c") + '</div><p class="bv-sub">' + x.d + "</p>" + bvList([["Valuation", x.tag], ["Share of hard & private", (x.v / t.hd * 100).toFixed(1) + "%"]]), help: SLIDE_HELP.assets };
     });
     else if (s.id === "activity") items = feed.slice(0, 5).map(function (f) {
       return { kicker: "Agent activity", title: f[1], html: '<div class="bv-big">' + f[0] + '</div><p class="bv-sub">' + (f[2] ? "At " + f[2] : "Earlier today") + "</p>", help: SLIDE_HELP.activity };
@@ -308,7 +375,9 @@
   function go(i) {
     cur = i; phase = still ? "live" : "build"; stepN = 0; holdTicks = 0; t0 = Date.now();
     var s = SLIDES[cur];
-    $("ws-tabs").querySelectorAll("button").forEach(function (b, j) { b.setAttribute("aria-selected", String(j === cur)); });
+    $("ws-tabs").querySelectorAll("button").forEach(function (b, j) { b.setAttribute("aria-selected", String(j === cur)); b.tabIndex = j === cur ? 0 : -1; });
+    var tb = $("ws-tabs").children[cur], strip = $("ws-tabs");
+    if (tb && root.offsetParent) strip.scrollTo({ left: tb.offsetLeft - (strip.clientWidth - tb.offsetWidth) / 2, behavior: still ? "auto" : "smooth" });
     $("ws-cover-k").textContent = s.doc;
     $("ws-cover-h").textContent = s.h;
     $("ws-job").textContent = (phase === "build" ? "Building your " : "Your ") + s.t.toLowerCase();

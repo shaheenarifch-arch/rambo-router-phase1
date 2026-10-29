@@ -48,7 +48,10 @@
 
   // ---------- setup ----------
   var h = new Date().getHours();
-  el.greeting.textContent = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+  var hello = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+  function greet() { var n = window.BLACK_NAME && window.BLACK_NAME.get(); el.greeting.textContent = hello + (n ? ", " + n : ""); }
+  greet();
+  if (window.BLACK_NAME) window.BLACK_NAME.onChange(greet);
   el.studio.href = CFG.studioUrl || "https://studio.getservices.ai";
   var ENGINES = [];
   function setStatus() {

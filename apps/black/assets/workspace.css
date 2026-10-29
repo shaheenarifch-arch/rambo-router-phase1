@@ -112,3 +112,25 @@
 .ws-cover{cursor:zoom-in}
 .ws-cover .ws-row.bv-tap{cursor:pointer}
 @media(max-width:520px){.ws-exp{display:none}}
+/* the user's name in the workspace header */
+.ws-who{display:flex;align-items:center;gap:8px;min-width:0}
+.ws-who .ws-kicker{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ws-name-edit{flex:none;width:24px;height:24px;border-radius:7px;border:1px solid transparent;color:var(--dim);font-size:12px}
+.ws-name-edit:hover{border-color:var(--line-gold);color:var(--gold)}
+.ws-name-ask{display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px}
+.ws-name-ask label{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);font-weight:600}
+.ws-name-ask input{width:150px;background:#0a0a0a;border:1px solid var(--line-gold);border-radius:999px;padding:5px 12px;color:var(--text);font-size:13px}
+.ws-name-ask input:focus{outline:none;border-color:var(--gold)}
+.ws-name-ask button{border:1px solid var(--line-gold);border-radius:999px;padding:5px 12px;font-size:12px;color:#0a0a0a;background:var(--gold-grad);font-weight:600}
+.ws-name-ask .ws-name-x{background:transparent;color:var(--muted);border-color:var(--line);padding:5px 9px}
+.ws-name-ask small{flex-basis:100%;font-size:11px;color:var(--dim)}
+@media(max-width:860px){.ws-name-ask input{width:130px}}
+/* tab strip with left / right arrows */
+.ws-top{flex-wrap:wrap;row-gap:12px}
+.ws-who{flex:1 1 0;min-width:0}
+.ws-nav{display:flex;align-items:center;gap:6px;order:3;width:100%;min-width:0}
+.ws-nav .ws-tabs{flex:1;order:0;width:auto}
+.ws-nav .ws-tabs{margin-left:0;scroll-behavior:smooth;-webkit-mask-image:linear-gradient(90deg,transparent,#000 14px,#000 calc(100% - 14px),transparent);mask-image:linear-gradient(90deg,transparent,#000 14px,#000 calc(100% - 14px),transparent);padding:0 8px}
+.ws-arrow{flex:none;width:28px;height:28px;border-radius:999px;border:1px solid var(--line);color:var(--muted);font-size:17px;line-height:1}
+.ws-arrow:hover{border-color:var(--line-gold);color:var(--gold)}
+@media(max-width:860px){.ws-nav .ws-tabs{order:0;width:auto;flex:1}}
