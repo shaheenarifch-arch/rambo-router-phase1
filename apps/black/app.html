@@ -12,6 +12,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/black.css?v=3">
 <link rel="stylesheet" href="assets/workspace.css?v=1">
+<link rel="stylesheet" href="assets/calendar.css?v=1">
 <script>
   // Preview gate: send visitors without access back to the unlock screen.
   try { if (localStorage.getItem("black.access") !== "preview") location.replace("index.html?unlock=1"); } catch (e) {}
@@ -214,7 +215,10 @@ body{height:100vh;height:100dvh;overflow:hidden}
         </button>
         <button type="button" class="status" id="status"><span class="led"></span><span id="status-text">Preview mode</span></button>
       </div>
-      <span class="badge-exec">Black Edition</span>
+      <div class="right">
+        <button type="button" class="account" id="account-btn" title="Sign in with your GetServices account"><span class="lbl">Sign in</span></button>
+        <span class="badge-exec">Black Edition</span>
+      </div>
     </header>
 
     <div class="scroll" id="scroll">
@@ -263,9 +267,34 @@ body{height:100vh;height:100dvh;overflow:hidden}
   </div>
 </div>
 
+<div class="modal-backdrop" id="signin-modal" role="dialog" aria-modal="true" aria-labelledby="si-title" aria-hidden="true">
+  <div class="modal">
+    <button class="close" data-close aria-label="Close">✕</button>
+    <span class="eyebrow"><span class="dot"></span>GetServices account</span>
+    <h2 id="si-title">Sign in to <span class="gold-text">BLACK</span></h2>
+    <p id="si-reason"></p>
+    <form id="si-form" class="si-form">
+      <label>Email<input id="si-email" type="email" autocomplete="username" required></label>
+      <label>Password<input id="si-password" type="password" autocomplete="current-password" required></label>
+      <p class="error" id="si-error" aria-live="polite"></p>
+      <button class="btn btn-gold" id="si-submit" type="submit">Sign in</button>
+    </form>
+    <div class="si-providers" id="si-providers"></div>
+    <p class="fine">No account? <a id="si-signup" href="https://app.getservices.ai/#/signup" target="_blank" rel="noopener">Create one at GetServices</a></p>
+  </div>
+</div>
+
+<aside class="cal-drawer" id="cal-drawer" aria-hidden="true" aria-label="Your calendar">
+  <div class="cal-panel">
+    <div class="cal-head"><strong>Your calendar</strong><button type="button" class="close" data-close aria-label="Close">✕</button></div>
+    <div class="cal-body" id="cal-body"></div>
+  </div>
+</aside>
+
 <script src="config.js"></script>
-<script src="assets/workspace.js?v=1"></script>
+<script src="assets/workspace.js?v=2"></script>
 <script src="assets/attach.js?v=1"></script>
-<script src="assets/app.js?v=7"></script>
+<script src="assets/calendar.js?v=1"></script>
+<script src="assets/app.js?v=8"></script>
 </body>
 </html>

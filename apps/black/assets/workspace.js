@@ -44,6 +44,7 @@
     { t: at(13, 0), n: "Tax advisor", tag: "3 documents" },
     { t: at(16, 30), n: "Deal review", tag: "Deck drafting" }
   ];
+  var realMeetings = false; // true once the signed-in user's calendar replaces the demo meetings
   var statements = [
     { n: "Brokerage · " + monthName(), p: 100 },
     { n: "Private bank · " + monthName(), p: 100 },
@@ -208,8 +209,9 @@
       html = '<div class="ws-sum"><span>Hard assets & private holdings</span><b>' + money(t.hd) + "</b></div>" +
         rows(hard, function (x) { return '<span class="nm">' + x.n + "<small>" + x.d + "</small></span><b>" + money(x.v) + '</b><span class="tag">' + x.tag + "</span>"; }, shown);
     } else if (s.id === "today") {
-      html = '<div class="ws-cols"><div><h5>Today</h5>' +
-        rows(meetings, function (x) { return "<span class='tm'>" + hm(x.t) + "</span><span class='nm'>" + x.n + "<small>" + x.tag + "</small></span>"; }, shown) +
+      html = '<div class="ws-cols"><div><h5>' + (realMeetings ? "Today · your calendar" : "Today") + "</h5>" +
+        (meetings.length ? rows(meetings, function (x) { return "<span class='tm'>" + (x.allDay ? "All day" : hm(x.t)) + "</span><span class='nm'>" + esc(x.n) + "<small>" + esc(x.tag) + "</small></span>"; }, shown)
+          : '<div class="ws-row in"><span class="tm">—</span><span class="nm">No meetings today<small>Type "schedule…" to book one</small></span></div>') +
         "</div><div><h5>Statements</h5>" +
         rows(statements, function (x) {
           var st = x.p >= 100 ? (x.warn ? "⚠ " + x.warn : "✔ Reconciled") : "⟳ " + Math.round(x.p) + "%";
@@ -297,6 +299,12 @@
   // The console pauses the workspace while a brief is open and resumes it on "New brief".
   window.BLACK_WORKSPACE = {
     pause: function () { paused = true; },
-    resume: function () { paused = false; go(cur); }
+    resume: function () { paused = false; go(cur); },
+    // Real meetings from the BLACK calendar: [{ start, title, tag, allDay }]
+    setMeetings: function (list) {
+      meetings = (list || []).slice(0, 5).map(function (m) { return { t: new Date(m.start), n: m.title, tag: m.tag || "", allDay: !!m.allDay }; });
+      realMeetings = true;
+      if (SLIDES[cur].id === "today") render(99);
+    }
   };
 })();
