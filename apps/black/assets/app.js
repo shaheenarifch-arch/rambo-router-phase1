@@ -159,7 +159,8 @@
   function submit() {
     var att = window.BLACK_ATTACH && window.BLACK_ATTACH.current();
     var text = el.prompt.value.trim(); if ((!text && !att) || busy) return;
-    if (!text) text = att && att.kind === "calendar" ? "Summarize my calendar: upcoming meetings, busy days, conflicts and anything I need to prepare for."
+    if (!text) text = att && att.kind === "statement" ? "Summarize this bank statement: money in and out, biggest spending, fees, unusual charges and anything I should act on."
+      : att && att.kind === "calendar" ? "Summarize my calendar: upcoming meetings, busy days, conflicts and anything I need to prepare for."
       : "Analyze this spreadsheet: the key totals, trends and anything that needs my attention.";
     var cal = !att && window.BLACK_CAL;
     var scheduling = cal && window.BLACK_CAL.isScheduling(text);
@@ -351,7 +352,9 @@
     var b = document.createElement("div"); b.className = "bubble"; b.textContent = text;
     if (file) {
       var f = document.createElement("div"); f.className = "bubble-file";
-      f.textContent = "▦ " + file.name + " · " + file.sheets + " sheet" + (file.sheets > 1 ? "s" : "") + " · " + Number(file.rows).toLocaleString() + " rows";
+      f.textContent = file.kind === "statement" ? "\ud83c\udfe6 " + file.name + " · bank statement · " + Number(file.rows).toLocaleString() + " transactions"
+        : file.kind === "calendar" ? "\ud83d\uddd3 " + file.name + " · calendar · " + Number(file.rows).toLocaleString() + " events"
+        : "▦ " + file.name + " · " + file.sheets + " sheet" + (file.sheets > 1 ? "s" : "") + " · " + Number(file.rows).toLocaleString() + " rows";
       b.insertBefore(f, b.firstChild);
     }
     d.appendChild(b); el.thread.appendChild(d); scrollEnd();

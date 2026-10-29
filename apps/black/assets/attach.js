@@ -9,7 +9,7 @@
   "use strict";
   var LIB = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
   var MAX_BYTES = 5 * 1024 * 1024, MAX_SHEETS = 3, MAX_ROWS = 40, MAX_COLS = 20, MAX_CHARS = 11000;
-  var OK = /\.(xlsx|xlsm|xls|csv|ics)$/i, ICS = /\.ics$/i, MAX_EVENTS = 80;
+  var OK = /\.(xlsx|xlsm|xls|csv|ics|ofx|qfx|qbo|pdf)$/i, ICS = /\.ics$/i, MAX_EVENTS = 80;
   var HELP = 'How to export a calendar file: <a href="https://support.google.com/calendar/answer/37111?hl=en" target="_blank" rel="noopener">Google</a> \u00b7 ' +
     '<a href="https://support.microsoft.com/en-us/outlook/export-an-outlook-calendar-to-google-calendar" target="_blank" rel="noopener">Outlook</a> \u00b7 ' +
     '<a href="https://support.apple.com/guide/calendar/icl1023/mac" target="_blank" rel="noopener">Apple</a>';
@@ -48,7 +48,7 @@
 
   function pick(f) {
     if (!f) return;
-    if (!OK.test(f.name)) return fail("BLACK can read Excel (.xlsx, .xls), .csv and calendar (.ics) files.", true);
+    if (!OK.test(f.name)) return fail("BLACK can read Excel (.xlsx, .xls), .csv, calendar (.ics) and bank statement (.ofx, .qfx, .pdf) files.", "all");
     if (f.size > MAX_BYTES) return fail(f.name + " is " + mb(f.size) + ". The limit is 5 MB.");
     file = null; emit();
     tray.hidden = false;
@@ -62,16 +62,36 @@
       }).catch(function () { fail("Couldn't read " + f.name + ". Is it a valid calendar (.ics) file?", true); });
       return;
     }
+    var STMT = window.BLACK_STMT;
+    if (STMT && STMT.isStatementFile(f.name)) {
+      var pdf = /\.pdf$/i.test(f.name);
+      (pdf ? f.arrayBuffer().then(STMT.parsePdf) : f.text().then(STMT.parseOfx)).then(function (st) {
+        if (!st.n && st.closing == null && !st.text) return fail(f.name + " has no transactions or balances BLACK can read.", "bank");
+        useStatement(f, st);
+      }).catch(function (e) {
+        fail(e && e.message === "scan" ? f.name + " looks like a scanned image, so there is no text to read. Download the statement as CSV, OFX/QFX or a text PDF instead."
+          : e && e.message === "lib" ? "Couldn't load the PDF reader. Check your connection and try again." : "Couldn't read " + f.name + ". Is it a valid bank statement file?", "bank");
+      });
+      return;
+    }
     Promise.all([loadLib(), f.arrayBuffer()]).then(function (r) {
       var XLSX = r[0], wb = XLSX.read(r[1], { type: "array", cellDates: true });
       var sheets = wb.SheetNames.slice(0, MAX_SHEETS).map(function (n) { return parseSheet(XLSX, n, wb.Sheets[n]); })
         .filter(function (s) { return s.rows > 0 || s.header.length; });
       if (!sheets.length) return fail(f.name + " has no readable data.");
+      var st = STMT && STMT.fromSheet(sheets[0]);
+      if (st) return useStatement(f, st); // looks like a bank export: date + amount (or debit/credit) columns
       file = { name: f.name, size: f.size, sheetCount: wb.SheetNames.length, sheets: sheets };
       render(); emit();
     }).catch(function (e) {
       fail(e && e.message === "lib" ? "Couldn't load the spreadsheet reader. Check your connection and try again." : "Couldn't read " + f.name + ". Is it a valid Excel or CSV file?");
     });
+  }
+
+  function useStatement(f, st) {
+    file = { name: f.name, size: f.size, sheetCount: 1, kind: "statement", stmt: st, total: st.n, sheets: [window.BLACK_STMT.sheetFor(st)] };
+    render(); emit();
+    if (window.BLACK_WORKSPACE && window.BLACK_WORKSPACE.setStatement) window.BLACK_WORKSPACE.setStatement({ label: window.BLACK_STMT.label(st), closing: st.closing, n: st.n });
   }
 
   function parseSheet(XLSX, name, ws) {
@@ -141,6 +161,7 @@
   // Compact, model-friendly description of the file (markdown tables), capped at MAX_CHARS.
   function promptBlock() {
     if (!file) return "";
+    if (file.kind === "statement") return window.BLACK_STMT.promptBlock(file.stmt, file.name);
     if (file.kind === "calendar") {
       var s0 = file.sheets[0], o = ["[Attached calendar: " + file.name + " · " + file.total + " events" + (file.total > s0.rows ? " (" + s0.rows + " included, upcoming first)" : "") +
         " · times in the user's local time zone unless a TZID applies]", "| " + s0.header.join(" | ") + " |", "|" + s0.header.map(function () { return "---"; }).join("|") + "|"];
@@ -170,24 +191,28 @@
     var total = file.sheets.reduce(function (n, x) { return n + x.rows; }, 0);
     tray.hidden = false;
     tray.innerHTML =
-      '<div class="att"><span class="att-ic" aria-hidden="true">' + (file.kind === "calendar" ? "\ud83d\uddd3" : "▦") + "</span>" +
+      '<div class="att"><span class="att-ic" aria-hidden="true">' + (file.kind === "calendar" ? "\ud83d\uddd3" : file.kind === "statement" ? "\ud83c\udfe6" : "▦") + "</span>" +
       '<span class="att-name"><b></b><small></small></span>' +
       '<button type="button" class="att-x" aria-label="Remove file">✕</button></div>' +
       '<div class="att-prev"><table><thead><tr>' + cols.map(function (h) { return "<th>" + esc(cell(h)) + "</th>"; }).join("") + "</tr></thead><tbody>" +
       rows.map(function (r) { return "<tr>" + cols.map(function (_, i) { return "<td>" + esc(cell(r[i] === undefined ? "" : r[i])) + "</td>"; }).join("") + "</tr>"; }).join("") +
-      "</tbody></table></div>";
+      "</tbody></table></div>" +
+      (file.kind === "statement" ? '<p class="att-help">\ud83d\udd12 Read in your browser. Only a summary with account numbers masked goes with your brief; nothing is stored.</p>' : "");
     tray.querySelector(".att-name b").textContent = file.name;
+    var st = file.stmt;
     tray.querySelector(".att-name small").textContent = file.kind === "calendar" ? file.total.toLocaleString() + " events · " + mb(file.size)
+      : file.kind === "statement" ? window.BLACK_STMT.label(st) + " · " + st.n + " transactions" + (st.closing != null ? " · balance " + window.BLACK_STMT.money(st.closing, st.currency) : "") + (st.pages ? " · " + st.pages + (st.pages > 1 ? " pages" : " page") : "")
       : file.sheetCount + " sheet" + (file.sheetCount > 1 ? "s" : "") + " · " + total.toLocaleString() + " rows · " + mb(file.size);
     tray.querySelector(".att-x").addEventListener("click", clear);
   }
   function fail(msg, help) {
     file = null; emit();
     tray.hidden = false;
-    tray.innerHTML = '<div class="att err"><span></span><button type="button" class="att-x" aria-label="Dismiss">✕</button></div>' + (help ? '<p class="att-help">' + HELP + "</p>" : "");
+    tray.innerHTML = '<div class="att err"><span></span><button type="button" class="att-x" aria-label="Dismiss">✕</button></div>' + (help ? '<p class="att-help">' + (help === "bank" ? bankHelp() : help === "all" ? HELP + "<br>" + bankHelp() : HELP) + "</p>" : "");
     tray.querySelector(".err span").textContent = msg;
     tray.querySelector(".att-x").addEventListener("click", clear);
   }
+  function bankHelp() { return (window.BLACK_STMT && window.BLACK_STMT.HELP) || ""; }
   function clear() { file = null; tray.innerHTML = ""; tray.hidden = true; emit(); }
   function emit() { listeners.forEach(function (fn) { fn(file); }); }
   function mb(b) { return b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB"; }
