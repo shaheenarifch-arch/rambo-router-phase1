@@ -12,6 +12,7 @@
 
   // Same deterministic rules as the RAMBO TaskClassifier (classifier.ts), so the hint matches the router.
   var RULES = [
+    [/(https?:\/\/\S+|\bwww\.\S+|\b[a-z0-9-]+(\.[a-z0-9-]+)*\.(com|org|net|ai|io|us|uk|co|app|dev|site|online|store|info|biz|pk|ca|xyz|shop|win|fun|trade|guide|markets|nexus|news|tech)\b|\b(look ?up|whois|who owns|check (out )?(the |this |that )?(site|website|domain|url|link|web ?page)|is (it|this|that|[a-z0-9.-]+) (legit|a scam))\b)/i, "web_lookup"],
     [/\b(debug|error|exception|stack trace|fails?)\b/i, "debugging"],
     [/\b(code|typescript|javascript|python|api|function|class)\b/i, "coding"],
     [/\b(architecture|system design|database schema|microservice)\b/i, "architecture"],
@@ -26,7 +27,7 @@
   var LABELS = {
     debugging: "Debugging", coding: "Coding", architecture: "Architecture", seo_content: "SEO content",
     product_research: "Product research", market_analysis: "Market analysis", business_strategy: "Business strategy",
-    summarization: "Summary", extraction: "Extraction", live_research: "Live research", general_chat: "General"
+    summarization: "Summary", extraction: "Extraction", live_research: "Live research", web_lookup: "Web", general_chat: "General"
   };
   function classify(text) {
     for (var i = 0; i < RULES.length; i++) if (RULES[i][0].test(text)) return RULES[i][1];
