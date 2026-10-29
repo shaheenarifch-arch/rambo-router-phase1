@@ -485,19 +485,16 @@
     a.innerHTML = '<div class="head"><span class="who">BLACK</span></div><div class="body"></div><div class="trail"></div>';
     a.querySelector(".body").innerHTML = md(content);
     var trail = a.querySelector(".trail");
-    if (meta.preview) chip(trail, "Preview", "no model called", true);
-    if (meta.mode) chip(trail, "Mode", cap(meta.mode));
-    if (meta.taskType) chip(trail, "Task", LABELS[meta.taskType] || meta.taskType);
-    if (meta.provider) chip(trail, "Engine", meta.provider + (meta.model ? " · " + meta.model : ""));
-    if (meta.fallback) chip(trail, "Fallback", "used", true);
-    if (typeof meta.latencyMs === "number") chip(trail, "Latency", (meta.latencyMs / 1000).toFixed(1) + "s");
-    if (typeof meta.cost === "number") chip(trail, "Cost", "$" + meta.cost.toFixed(4));
-    if (meta.reasons && meta.reasons.length) chip(trail, "Why", meta.reasons.join(", "));
-    if (meta.timeline) meta.timeline.forEach(function (t) {
-      if (t.status === "skipped" || t.status === "queued") return;
-      var mark = t.status === "done" ? (t.partial ? "◐" : "✓") : t.status === "failed" ? "✕" : "–";
-      chip(trail, mark + " " + t.label, (t.model ? t.model + " · " : "") + (typeof t.ms === "number" ? (t.ms / 1000).toFixed(1) + "s" : STATUS[t.status] || t.status) + (t.error ? " · " + t.error : ""), t.status === "failed");
-    });
+    // One plain line instead of technical chips: who answered, how fast, and any automatic switch.
+    var note = "";
+    if (meta.preview) note = "Preview \u00b7 no AI engine was used for this answer.";
+    else if (meta.provider) {
+      note = "Answered by " + meta.provider + (typeof meta.latencyMs === "number" ? " in " + (meta.latencyMs / 1000).toFixed(1) + "s" : "") + ".";
+      var lost = (meta.timeline || []).filter(function (t) { return t.status === "cancelled" || t.status === "failed"; });
+      if (lost.length) note += " " + lost.map(function (t) { return t.label; }).join(" and ") + (lost.length > 1 ? " were" : " was") +
+        (lost.every(function (t) { return t.status === "cancelled"; }) ? " slower" : " unavailable") + ", so BLACK switched automatically.";
+    }
+    if (note) { var np = document.createElement("p"); np.className = "trail-note"; np.textContent = note; trail.appendChild(np); }
     if (meta.disagreements && meta.disagreements.length) {
       meta.disagreements.forEach(function (x) { chip(trail, "Disagreement", x, true); });
     }
