@@ -34,6 +34,8 @@ const RULES = [
   [/\b(debug|error|exception|stack trace|fails?)\b/i, "debugging"],
   [/\b(code|typescript|javascript|python|api|function|class)\b/i, "coding"],
   [/\b(architecture|system design|database schema|microservice)\b/i, "architecture"],
+  // Current facts and figures go to the live-web engines instead of model memory.
+  [/\b(latest|current(ly)?|today|this (week|month|quarter|year)|news|right now|stock price|share price|exchange rate|in 20\d\d|20\d\d (sales|results|revenue|deliveries|numbers))\b/i, "live_research"],
   [/\b(seo|keyword|meta description|search ranking)\b/i, "seo_content"],
   [/\b(product|supplier|listing|sku|catalog)\b/i, "product_research"],
   [/\b(market|competitor|trend)\b/i, "market_analysis"],
@@ -54,32 +56,40 @@ const ROUTES = {
   seo_content: ["anthropic", "perplexity", "openai", "gemini"],
   summarization: ["anthropic", "gemini", "openai"],
   extraction: ["gemini", "openai", "anthropic"],
+  live_research: ["perplexity", "xai", "gemini", "anthropic", "openai"],
   general_chat: ["anthropic", "openai", "gemini", "xai", "perplexity"]
 };
 const REASON = {
   coding: "CODING_SPECIALIST", debugging: "CODING_SPECIALIST", architecture: "DEEP_REASONING",
   business_strategy: "EXECUTIVE_WRITING", market_analysis: "LIVE_WEB_RESEARCH", product_research: "LIVE_WEB_RESEARCH",
-  seo_content: "LONG_FORM_WRITING", summarization: "SYNTHESIS", extraction: "STRUCTURED_EXTRACTION", general_chat: "GENERAL_DEFAULT"
+  seo_content: "LONG_FORM_WRITING", live_research: "LIVE_WEB_RESEARCH", summarization: "SYNTHESIS", extraction: "STRUCTURED_EXTRACTION", general_chat: "GENERAL_DEFAULT"
 };
 
 const SYSTEM =
   "You are BLACK, the executive AI of GetServices.ai. Answer for a busy executive: lead with the answer or recommendation, " +
   "then the reasoning, risks and next steps. Use short markdown sections (### headings) and bullet points. Be specific and concise. " +
-  "If you are unsure or lack current data, say so plainly instead of guessing.";
+  "If you are unsure or lack current data, say so plainly instead of guessing. If the brief includes an [Attached spreadsheet], analyze that data: use its column totals, show key tables and one chart (a fenced chart JSON block) built from it.";
 
 // Fast and Smart: a quick, direct answer, not a report. Deep and Executive keep the full SYSTEM style.
 const QUICK =
-  "You are BLACK, the executive AI of GetServices.ai. Give a smart, quick answer: lead with the answer in one or two sentences, " +
-  "then at most 3 short bullet points with the key data (numbers, dates, names). Keep the text under 120 words. " +
-  "No headings, tables, mockups, ASCII diagrams or long sections unless the user explicitly asks for detail. " +
-  "When numbers compare or trend, add ONE chart as a fenced code block with language 'chart' containing only JSON like " +
+  "You are BLACK, the executive AI of GetServices.ai. Answer like a visual executive brief, not an essay. Use this order:\n" +
+  "1) A fenced code block with language 'kpis' containing only a JSON array of 2 to 4 key figures, e.g. " +
+  "[{\"label\":\"Projected ARR lift\",\"value\":\"+18%\",\"note\":\"next 12 months\"},{\"label\":\"Main risk\",\"value\":\"Churn\",\"note\":\"SMB plans\"}]. " +
+  "Values are short (numbers, %, $, or one or two words). Always include this block.\n" +
+  "2) The answer in one or two sentences.\n" +
+  "3) At most 3 short bullet points with supporting data (numbers, dates, names).\n" +
+  "4) Whenever any numbers can be compared or trended, ONE fenced code block with language 'chart' containing only JSON like " +
   "{\"type\":\"bar\",\"title\":\"Revenue by quarter ($M)\",\"labels\":[\"Q1\",\"Q2\"],\"values\":[1.2,1.8]} (type is bar or line, at most 10 points). " +
-  "If sources help, end with a line 'Sources:' and up to 3 markdown links [title](https://...) to real, well-known pages you are confident exist; never invent URLs. " +
+  "Mark estimates as estimates in the title.\n" +
+  "5) If sources help, a final line 'Sources:' with up to 3 markdown links [title](https://...) to real, well-known pages you are confident exist; never invent URLs.\n" +
+  "Keep the text under 120 words. No headings, tables, mockups or ASCII diagrams unless the user explicitly asks for detail. " +
+  "If the brief includes an [Attached spreadsheet], base the data cards, chart and figures only on that data (use the column totals for full-sheet numbers), " +
+  "and add a short markdown table of the most important rows. " +
   "If you are unsure or lack current data, say so plainly instead of guessing.";
 const systemFor = (mode) => (mode === "fast" || mode === "smart" ? QUICK : SYSTEM);
 
 const MAX_MESSAGES = 12;
-const MAX_CHARS = 24000;
+const MAX_CHARS = 40000; // room for one attached spreadsheet summary (~11K chars) plus history
 const TIMEOUT_MS = 55000;
 const ENGINE_TIMEOUT_MS = 45000;   // per engine in a live (streamed) brief; a slow engine is skipped, not fatal
 const SYNTH_TIMEOUT_MS = 50000;
@@ -109,10 +119,13 @@ export async function onRequestPost({ request, env, waitUntil }) {
   const taskType = TASKS.has(body.taskType) ? body.taskType : classify(lastUser);
   const tier = mode === "executive" ? "deep" : mode;
   const order = (ROUTES[taskType] || ROUTES.general_chat).filter((e) => available.includes(e));
+  // "What does Perplexity think?" -> that engine answers first.
+  const asked = askedEngine(lastUser, available);
+  if (asked) { const at = order.indexOf(asked); if (at >= 0) order.splice(at, 1); order.unshift(asked); }
   const requestId = crypto.randomUUID();
   const started = Date.now();
 
-  if (body.stream === true) return live({ env, waitUntil, mode, tier, order, messages, taskType, requestId, started });
+  if (body.stream === true) return live({ env, waitUntil, mode, tier, order, messages, taskType, requestId, started, asked });
 
   try {
     if (mode === "executive" && order.length >= 2) {
@@ -121,6 +134,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
     }
     // Single answer with ordered fallback.
     const reasons = [REASON[taskType], "MODE_" + mode.toUpperCase()];
+    if (asked) reasons.push("USER_REQUESTED_" + asked.toUpperCase());
     if (mode === "executive") reasons.push("EXECUTIVE_NEEDS_TWO_ENGINES");
     const failures = [];
     for (let i = 0; i < order.length; i++) {
@@ -250,7 +264,7 @@ async function post(url, headers, payload) {
 //   ping   {t}                           (keep-alive every 8s)
 //   done   <same body as the JSON response>
 //   error  {error, engines?}
-function live({ env, waitUntil, mode, tier, order, messages, taskType, requestId, started }) {
+function live({ env, waitUntil, mode, tier, order, messages, taskType, requestId, started, asked }) {
   const { readable, writable } = new TransformStream();
   const w = writable.getWriter();
   const enc = new TextEncoder();
@@ -264,7 +278,7 @@ function live({ env, waitUntil, mode, tier, order, messages, taskType, requestId
   const job = (async () => {
     try {
       const executive = mode === "executive" && order.length >= 2;
-      await (executive ? liveExecutive : liveSingle)({ env, send, mode, tier, order, messages, taskType, requestId, started });
+      await (executive ? liveExecutive : liveSingle)({ env, send, mode, tier, order, messages, taskType, requestId, started, asked });
     } catch (e) {
       await send("error", { error: "INTERNAL_ERROR", detail: String((e && e.message) || e).slice(0, 160) });
     } finally {
@@ -321,8 +335,9 @@ async function runEngine({ env, send, provider, tier, messages, target, timeoutM
   return { ok: false, provider, failure: err };
 }
 
-async function liveSingle({ env, send, mode, tier, order, messages, taskType, requestId, started }) {
+async function liveSingle({ env, send, mode, tier, order, messages, taskType, requestId, started, asked }) {
   const reasons = [REASON[taskType], "MODE_" + mode.toUpperCase()];
+  if (asked) reasons.push("USER_REQUESTED_" + asked.toUpperCase());
   if (mode === "executive") reasons.push("EXECUTIVE_NEEDS_TWO_ENGINES");
   await send("route", { mode, taskType, reasons, engines: order.map((e) => engineInfo(env, e, tier)), judge: null });
   const failures = [];
@@ -507,6 +522,14 @@ function allFailed(failures) {
 }
 function engines(env) {
   return ["anthropic", "openai", "gemini", "perplexity", "xai"].filter((e) => env[e.toUpperCase() + "_API_KEY"]);
+}
+function askedEngine(text, available) {
+  const want = [
+    [/\bperplexity\b/i, "perplexity"], [/\b(grok|xai)\b/i, "xai"], [/\b(gpt|chatgpt|openai)\b/i, "openai"],
+    [/\bgemini\b/i, "gemini"], [/\bclaude\b/i, "anthropic"]
+  ];
+  for (const [re, e] of want) if (re.test(text) && available.includes(e)) return e;
+  return null;
 }
 function classify(text) {
   for (const [re, t] of RULES) if (re.test(text)) return t;

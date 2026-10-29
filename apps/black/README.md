@@ -11,6 +11,7 @@ Static front end for BLACK™, the dark-and-gold executive edition of GetService
 | `assets/unlock.js` | Unlock flow (preview access; billing comes later) |
 | `assets/app.js` | Console logic; calls `POST /v1/responses` (streamed) and shows the Live Engines panel |
 | `assets/workspace.js` / `workspace.css` | Command Workspace on the console home: live slides for net worth, stocks, crypto, strategic portfolio, allocation, assets, meetings and statements, activity (demo data) |
+| `assets/attach.js` | Excel/CSV upload: read in the browser with SheetJS (cdnjs, loaded on first use); a compact data summary is added to the brief. Nothing is stored server side |
 | `functions/v1/responses.js` | Live gateway (Claude, GPT, Gemini, Perplexity, Grok) |
 
 ## How the unlock works today

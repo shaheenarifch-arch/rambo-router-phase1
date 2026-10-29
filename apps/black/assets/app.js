@@ -15,6 +15,7 @@
     [/\b(debug|error|exception|stack trace|fails?)\b/i, "debugging"],
     [/\b(code|typescript|javascript|python|api|function|class)\b/i, "coding"],
     [/\b(architecture|system design|database schema|microservice)\b/i, "architecture"],
+    [/\b(latest|current(ly)?|today|this (week|month|quarter|year)|news|right now|stock price|share price|exchange rate|in 20\d\d|20\d\d (sales|results|revenue|deliveries|numbers))\b/i, "live_research"],
     [/\b(seo|keyword|meta description|search ranking)\b/i, "seo_content"],
     [/\b(product|supplier|listing|sku|catalog)\b/i, "product_research"],
     [/\b(market|competitor|trend)\b/i, "market_analysis"],
@@ -25,7 +26,7 @@
   var LABELS = {
     debugging: "Debugging", coding: "Coding", architecture: "Architecture", seo_content: "SEO content",
     product_research: "Product research", market_analysis: "Market analysis", business_strategy: "Business strategy",
-    summarization: "Summary", extraction: "Extraction", general_chat: "General"
+    summarization: "Summary", extraction: "Extraction", live_research: "Live research", general_chat: "General"
   };
   function classify(text) {
     for (var i = 0; i < RULES.length; i++) if (RULES[i][0].test(text)) return RULES[i][1];
@@ -87,6 +88,7 @@
   el.railToggle.addEventListener("click", function () { el.rail.classList.contains("open") ? closeRail() : openRail(); });
   el.scrim.addEventListener("click", closeRail);
   renderHistory();
+  if (window.BLACK_ATTACH) window.BLACK_ATTACH.onChange(function () { onInput(); });
   el.prompt.focus();
 
   function setMode(m) {
@@ -97,7 +99,8 @@
     var v = el.prompt.value;
     el.prompt.style.height = "auto";
     el.prompt.style.height = Math.min(el.prompt.scrollHeight, 220) + "px";
-    el.send.disabled = busy || !v.trim();
+    var att = window.BLACK_ATTACH && window.BLACK_ATTACH.current();
+    el.send.disabled = busy || (!v.trim() && !att);
     el.detect.innerHTML = v.trim() ? "Detected: <b>" + LABELS[classify(v)] + "</b>" : "";
   }
   function openRail() { el.rail.classList.add("open"); el.scrim.classList.add("open"); el.railToggle.setAttribute("aria-expanded", "true"); }
@@ -114,7 +117,7 @@
     var b = briefs.find(function (x) { return x.id === id; }); if (!b) return;
     current = b; setMode(b.mode || "smart"); el.thread.innerHTML = ""; el.welcome.style.display = "none";
     if (window.BLACK_WORKSPACE) window.BLACK_WORKSPACE.pause();
-    b.messages.forEach(function (m) { m.role === "user" ? addUser(m.content) : addAnswer(m.meta || {}, m.content); });
+    b.messages.forEach(function (m) { m.role === "user" ? addUser(m.display || m.content, m.file) : addAnswer(m.meta || {}, m.content); });
     renderHistory(); closeRail(); scrollEnd();
   }
   function renderHistory() {
@@ -131,18 +134,22 @@
 
   // ---------- send ----------
   function submit() {
-    var text = el.prompt.value.trim(); if (!text || busy) return;
+    var att = window.BLACK_ATTACH && window.BLACK_ATTACH.current();
+    var text = el.prompt.value.trim(); if ((!text && !att) || busy) return;
+    if (!text) text = "Analyze this spreadsheet: the key totals, trends and anything that needs my attention.";
+    var content = att ? text + "\n\n" + window.BLACK_ATTACH.promptBlock() : text;
     if (!current) {
-      current = { id: String(Date.now()), title: text.slice(0, 60), mode: mode, messages: [] };
+      current = { id: String(Date.now()), title: (att && !el.prompt.value.trim() ? att.name : text).slice(0, 60), mode: mode, messages: [] };
       briefs.unshift(current);
     }
     current.mode = mode;
-    current.messages.push({ role: "user", content: text });
+    current.messages.push(att ? { role: "user", content: content, display: text, file: att } : { role: "user", content: text });
     save(); renderHistory();
     el.welcome.style.display = "none";
     if (window.BLACK_WORKSPACE) window.BLACK_WORKSPACE.pause();
-    addUser(text);
+    addUser(text, att);
     el.prompt.value = "";
+    if (att) window.BLACK_ATTACH.clear();
     dispatch(classify(text));
   }
 
@@ -157,7 +164,9 @@
       stick = nearBottom();
       pending.remove();
       res.meta.latencyMs = res.meta.latencyMs || Math.round(performance.now() - started);
-      addAnswer(res.meta, res.content);
+      var ans = addAnswer(res.meta, res.content);
+      if (stick && ans) requestAnimationFrame(function () { el.scroll.scrollTop += ans.getBoundingClientRect().top - el.scroll.getBoundingClientRect().top - 16; });
+      stick = false;
       current.messages.push({ role: "assistant", content: res.content, meta: res.meta });
       save();
     }).catch(function (err) {
@@ -172,7 +181,7 @@
       mode: mode,
       taskType: taskType,
       stream: true,
-      messages: current.messages.map(function (m) { return { role: m.role, content: m.content }; }),
+      messages: outgoing(current.messages),
       output: { format: "markdown" }
     };
     return fetch(API + "/v1/responses", {
@@ -238,6 +247,15 @@
       }
     };
   }
+  // Keeps briefs small: only the most recent spreadsheet's data is sent in full.
+  function outgoing(msgs) {
+    var last = -1;
+    msgs.forEach(function (m, i) { if (m.file) last = i; });
+    return msgs.map(function (m, i) {
+      if (m.file && i !== last) return { role: m.role, content: (m.display || "") + "\n\n[Earlier attachment: " + m.file.name + "]" };
+      return { role: m.role, content: m.content };
+    });
+  }
   function errorText(status, j) {
     if (status === 401 || status === 403) { LIVE = false; setStatus(); return "Your access code wasn't accepted. Tap the status badge at the top to enter it again."; }
     if (status === 413) return "That brief is too long. Shorten it or start a new brief.";
@@ -271,9 +289,14 @@
   }
 
   // ---------- render ----------
-  function addUser(text) {
+  function addUser(text, file) {
     var d = document.createElement("div"); d.className = "msg user";
     var b = document.createElement("div"); b.className = "bubble"; b.textContent = text;
+    if (file) {
+      var f = document.createElement("div"); f.className = "bubble-file";
+      f.textContent = "▦ " + file.name + " · " + file.sheets + " sheet" + (file.sheets > 1 ? "s" : "") + " · " + Number(file.rows).toLocaleString() + " rows";
+      b.insertBefore(f, b.firstChild);
+    }
     d.appendChild(b); el.thread.appendChild(d); scrollEnd();
   }
   var STATUS = { queued: "Queued", thinking: "Thinking…", writing: "Writing…", done: "Done", failed: "Failed", skipped: "Standby" };
@@ -342,7 +365,7 @@
     }
     function later() { if (!renderT) renderT = setTimeout(paint, 120); }
     return {
-      remove: function () { clearInterval(tick); d.remove(); },
+      remove: function () { clearInterval(tick); if (renderT) clearTimeout(renderT); renderT = -1; d.remove(); },
       timeline: function () {
         return order.map(function (k) { var r = rows[k]; return { label: r.label, model: r.model, status: r.status, ms: r.ms, tokens: r.tokens, partial: !!r.partial, error: r.error }; });
       },
@@ -436,6 +459,7 @@
       a.appendChild(fr);
     }
     d.appendChild(a); el.thread.appendChild(d);
+    return d;
   }
   function chip(parent, k, v, warn) {
     var s = document.createElement("span"); s.className = "chip" + (warn ? " warn" : "");
@@ -480,16 +504,46 @@
       '<defs><linearGradient id="bk-chart-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6e19a"/><stop offset="1" stop-color="#b8902f"/></linearGradient></defs>' +
       '<line x1="' + P + '" y1="' + y(0) + '" x2="' + (W - P) + '" y2="' + y(0) + '" stroke="rgba(255,255,255,.12)"/>' + marks + vlabels + xl + "</svg></figure>";
   }
+  // ```kpis [{label,value,note}]``` -> gold data cards.
+  function kpiCards(src) {
+    var a; try { a = JSON.parse(src.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"')); } catch (e) { return null; }
+    if (!Array.isArray(a) || !a.length) return null;
+    return '<div class="kpis">' + a.slice(0, 4).map(function (k, i) {
+      return '<div class="kpi" style="--d:' + i * 90 + 'ms"><span>' + esc(String(k.label || "")).slice(0, 40) + "</span><b>" + esc(String(k.value || "")).slice(0, 24) + "</b>" +
+        (k.note ? "<small>" + esc(String(k.note)).slice(0, 48) + "</small>" : "") + "</div>";
+    }).join("") + "</div>";
+  }
+  // Shown while a data block is still streaming in, instead of raw JSON.
+  function building(kind) {
+    return '<div class="building ' + kind + '"><span class="rpulse"></span>BLACK is building your ' + (kind === "kpis" ? "data cards" : kind === "chart" ? "chart" : "block") + "…<i></i><i></i><i></i></div>";
+  }
   function md(src) {
-    var out = [], blocks = esc(src || "").split(/```/);
+    var out = [], blocks = esc(src || "").split(/```/), open = blocks.length % 2 === 0;
     blocks.forEach(function (chunk, i) {
       if (i % 2) {
-        var c = /^chart\s*\n/.test(chunk) ? chartSvg(chunk.replace(/^chart\s*\n/, "")) : null;
-        out.push(c || "<pre><code>" + chunk.replace(/^\w*\n/, "") + "</code></pre>"); return;
+        var lang = (chunk.match(/^(\w*)/) || [])[1], body = chunk.replace(/^\w*\s*\n?/, "");
+        if (open && i === blocks.length - 1) { var kind = "kpis".indexOf(lang) === 0 ? "kpis" : "chart".indexOf(lang) === 0 ? "chart" : null;
+          out.push(kind ? building(kind) : "<pre><code>" + body + "</code></pre>"); return; }
+        var c = lang === "chart" ? chartSvg(body) : lang === "kpis" ? kpiCards(body) : null;
+        out.push(c || (lang === "chart" || lang === "kpis" ? "" : "<pre><code>" + body + "</code></pre>")); return;
       }
-      var list = null;
+      var list = null, table = null;
+      function flushTable() {
+        if (!table) return;
+        var head = table[0], rows = table.slice(1);
+        out.push('<div class="tbl"><table><thead><tr>' + head.map(function (c) { return "<th>" + inline(c) + "</th>"; }).join("") + "</tr></thead><tbody>" +
+          rows.map(function (r) { return "<tr>" + r.map(function (c) { return "<td>" + inline(c) + "</td>"; }).join("") + "</tr>"; }).join("") + "</tbody></table></div>");
+        table = null;
+      }
       chunk.split("\n").forEach(function (line) {
         var t = line.trim();
+        if (/^\|.*\|$/.test(t)) {
+          if (list) { out.push("<ul>" + list.join("") + "</ul>"); list = null; }
+          if (/^\|[\s:|-]+\|$/.test(t)) return; // |---|---| separator
+          (table = table || []).push(t.slice(1, -1).split("|").map(function (c) { return c.trim(); }));
+          return;
+        }
+        flushTable();
         if (/^[-*] /.test(t)) { if (!list) { list = []; } list.push("<li>" + inline(t.slice(2)) + "</li>"); return; }
         if (list) { out.push("<ul>" + list.join("") + "</ul>"); list = null; }
         if (!t) return;
@@ -497,6 +551,7 @@
         out.push(hm ? "<h3>" + inline(hm[1]) + "</h3>" : "<p>" + inline(t) + "</p>");
       });
       if (list) out.push("<ul>" + list.join("") + "</ul>");
+      flushTable();
     });
     return out.join("");
   }
