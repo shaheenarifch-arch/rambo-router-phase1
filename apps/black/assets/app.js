@@ -95,7 +95,20 @@
   });
   el.form.addEventListener("submit", function (e) { e.preventDefault(); submit(); });
   $("new-brief").addEventListener("click", function () { newBrief(); closeRail(); });
-  el.railToggle.addEventListener("click", function () { el.rail.classList.contains("open") ? closeRail() : openRail(); });
+  // Phone: the briefs column slides in as a drawer. Desktop: it collapses to give the brief more room (remembered).
+  var narrow = window.matchMedia ? window.matchMedia("(max-width:860px)") : { matches: false };
+  function setCollapsed(on) {
+    document.documentElement.classList.toggle("rail-collapsed", on);
+    if (!narrow.matches) { el.railToggle.setAttribute("aria-expanded", String(!on)); el.railToggle.setAttribute("aria-label", on ? "Show briefs column" : "Hide briefs column"); el.railToggle.title = on ? "Show briefs column" : "Hide briefs column"; }
+    try { localStorage.setItem("black.rail", on ? "collapsed" : "open"); } catch (e) {}
+  }
+  try { if (localStorage.getItem("black.rail") === "collapsed") setCollapsed(true); else setCollapsed(false); } catch (e) {}
+  el.railToggle.addEventListener("click", function () {
+    if (!narrow.matches) return setCollapsed(!document.documentElement.classList.contains("rail-collapsed"));
+    el.rail.classList.contains("open") ? closeRail() : openRail();
+  });
+  var railX = document.getElementById("rail-collapse");
+  if (railX) railX.addEventListener("click", function () { narrow.matches ? closeRail() : setCollapsed(true); });
   el.scrim.addEventListener("click", closeRail);
   renderHistory();
   if (window.BLACK_ATTACH) window.BLACK_ATTACH.onChange(function () { onInput(); });
@@ -494,6 +507,7 @@
       a.appendChild(det);
     }
     collapse(a);
+    tapCards(a);
     if (!meta.preview && (meta.mode === "fast" || meta.mode === "smart")) {
       var fr = document.createElement("button"); fr.type = "button"; fr.className = "btn btn-ghost btn-sm full-report"; fr.textContent = "Full report →";
       fr.title = "Re-run this brief in Deep mode for a detailed report with data and sources";
@@ -508,6 +522,32 @@
     d.appendChild(a); el.thread.appendChild(d);
     return d;
   }
+  // Data cards and charts in an answer open in the bigger viewer (Back / Next through that answer's cards).
+  function tapCards(a) {
+    if (!window.BLACK_VIEW) return;
+    a.querySelectorAll(".kpis .kpi, figure.chart").forEach(function (c) { window.BLACK_VIEW.clickable(c, "Open in a bigger view"); });
+  }
+  el.thread.addEventListener("click", function (e) {
+    var c = e.target.closest(".answer .bv-tap"); if (!c || !window.BLACK_VIEW) return;
+    var ans = c.closest(".answer"), cards = Array.prototype.slice.call(ans.querySelectorAll(".kpis .kpi, figure.chart"));
+    var help = "From BLACK\u2019s answer above. Open <b>Details</b> under the answer to see sources, the engine used and how it was worked out.";
+    window.BLACK_VIEW.open(cards.map(function (k) {
+      if (k.tagName === "FIGURE") return { kicker: "Chart", title: (k.querySelector("figcaption") || {}).textContent || "Chart", html: k.innerHTML, help: help };
+      var label = (k.querySelector("span") || {}).textContent || "", value = (k.querySelector("b") || {}).textContent || "", note = (k.querySelector("small") || {}).textContent || "";
+      return { kicker: label, title: value, html: note ? '<p class="bv-sub">' + esc(note) + "</p>" : "", help: help,
+        action: { label: "Ask BLACK about this \u2192", run: function () { el.prompt.value = "Tell me more about " + label + " (" + value + ")" + (note ? ": " + note : "") + "."; el.prompt.focus(); onInput(); } } };
+    }), cards.indexOf(c));
+  });
+
+  // "Back to latest" when the reader has scrolled up in a long brief.
+  var toLatest = document.createElement("button");
+  toLatest.type = "button"; toLatest.className = "to-latest"; toLatest.hidden = true; toLatest.textContent = "\u2193 Back to latest";
+  document.body.appendChild(toLatest);
+  toLatest.addEventListener("click", function () { el.scroll.scrollTo({ top: el.scroll.scrollHeight, behavior: "smooth" }); });
+  el.scroll.addEventListener("scroll", function () {
+    toLatest.hidden = !el.thread.children.length || el.scroll.scrollHeight - el.scroll.scrollTop - el.scroll.clientHeight < 500;
+  }, { passive: true });
+
   // Highlight the key answer (data cards + first paragraph); everything else goes under "Details".
   function collapse(a) {
     var body = a.querySelector(".body"), kids = Array.prototype.slice.call(body.children);

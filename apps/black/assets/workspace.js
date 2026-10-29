@@ -102,6 +102,7 @@
     { id: "today", doc: "Today \u00b7 " + TODAY, k: "Meetings & Statements", h: "Your Day", t: "Your day", tasks: [["Claude", "Preparing meeting briefs"], ["Gemini", "Parsing statements"], ["RAMBO", "Filing documents"]] },
     { id: "activity", doc: "Agent Activity \u00b7 Live", k: "Live Activity", h: "Agents at Work", t: "Activity", tasks: [["RAMBO", "Streaming agent activity"]] }
   ];
+  var viewing = false;
   var cur = 0, phase = "build", stepN = 0, holdTicks = 0, paused = false, userPaused = false, hidden = false, t0 = Date.now(), n = 0;
   var TICK = 250, STEP_TICKS = 3, HOLD_TICKS = 28; // 0.75s per agent step, ~7s live per slide
 
@@ -115,7 +116,11 @@
     "</div>" +
     '<div class="ws-kpis" id="ws-kpis"></div>' +
     '<div class="ws-cover">' +
-      '<div class="ws-status" id="ws-agent"><span class="ws-pulse"></span><b>RAMBO</b><span class="ws-job" id="ws-job"></span><span class="ws-sub" id="ws-sub"></span><span class="ws-clock" id="ws-clock">LIVE</span></div>' +
+      '<div class="ws-status" id="ws-agent"><span class="ws-pulse"></span><b>RAMBO</b><span class="ws-job" id="ws-job"></span><span class="ws-sub" id="ws-sub"></span>' +
+        '<button type="button" class="ws-skip" id="ws-skip" title="Skip the build animation and show the finished slide">Skip \u203a</button>' +
+        '<button type="button" class="ws-det" id="ws-det" aria-expanded="false" aria-controls="ws-sub" title="Show which agents built this slide">Details \u25b8</button>' +
+        '<button type="button" class="ws-exp" id="ws-exp" title="Open this slide in a bigger view">\u2922 Expand</button>' +
+        '<span class="ws-clock" id="ws-clock">LIVE</span></div>' +
       '<span class="ws-cover-k" id="ws-cover-k"></span><span class="ws-cover-h gold-text" id="ws-cover-h"></span>' +
       '<div class="ws-slide" id="ws-slide" aria-live="polite"></div>' +
     "</div>" +
@@ -131,27 +136,110 @@
     $("ws-play").setAttribute("aria-label", userPaused ? "Play slides" : "Pause slides");
   });
   document.addEventListener("visibilitychange", function () { hidden = document.hidden; });
+  $("ws-skip").addEventListener("click", function () { if (phase === "build") finishBuild(); });
+  $("ws-det").addEventListener("click", function () {
+    var on = root.classList.toggle("show-d");
+    this.setAttribute("aria-expanded", String(on)); this.textContent = on ? "Details \u25be" : "Details \u25b8";
+  });
+  $("ws-exp").addEventListener("click", function () { openSlides(cur); });
+  $("ws-kpis").addEventListener("click", function (e) { var k = e.target.closest("[data-k]"); if (k) openKpis(+k.dataset.k); });
+  root.querySelector(".ws-cover").addEventListener("click", function (e) {
+    if (e.target.closest("button,a")) return;
+    var r = e.target.closest(".ws-row[data-r]");
+    if (r) openRows(cur, r.dataset.g || "", +r.dataset.r); else openSlides(cur);
+  });
 
   function kpis() {
     var t = totals();
     var tasks = 3 + (cur % 3);
     $("ws-kpis").innerHTML =
-      kpi("Net worth", money(t.nw), (t.pnl >= 0 ? "▲ " : "▼ ") + (Math.abs(t.pnl) / (t.nw - t.pnl) * 100).toFixed(2) + "% today", t.pnl >= 0) +
-      kpi("Today's P&L", (t.pnl >= 0 ? "+" : "") + money(t.pnl), "Stocks and crypto", t.pnl >= 0) +
-      kpi("Liquid cash", money(t.cash), (t.cash / t.nw * 100).toFixed(1) + "% of net worth", null) +
-      kpi("BLACK agents", tasks + " running", "2 need your approval", null);
+      kpi("Net worth", money(t.nw), (t.pnl >= 0 ? "▲ " : "▼ ") + (Math.abs(t.pnl) / (t.nw - t.pnl) * 100).toFixed(2) + "% today", t.pnl >= 0, 0) +
+      kpi("Today's P&L", (t.pnl >= 0 ? "+" : "") + money(t.pnl), "Stocks and crypto", t.pnl >= 0, 1) +
+      kpi("Liquid cash", money(t.cash), (t.cash / t.nw * 100).toFixed(1) + "% of net worth", null, 2) +
+      kpi("BLACK agents", tasks + " running", "2 need your approval", null, 3);
   }
-  function kpi(k, v, s, good) {
-    return '<div class="ws-kpi"><span>' + k + '</span><b>' + v + '</b><small class="' + (good === true ? "up" : good === false ? "down" : "") + '">' + s + "</small></div>";
+  function kpi(k, v, s, good, i) {
+    return '<div class="ws-kpi bv-tap" role="button" tabindex="0" data-k="' + i + '" aria-label="Open ' + k + ' in a bigger view"><span>' + k + '</span><b>' + v + '</b><small class="' + (good === true ? "up" : good === false ? "down" : "") + '">' + s + "</small></div>";
   }
 
-  // ---------- slide renderers ----------
-  function rows(list, fn, n) {
-    return list.map(function (x, i) { return '<div class="ws-row' + (i < n ? " in" : "") + '" style="--d:' + i * 90 + 'ms">' + fn(x) + "</div>"; }).join("");
+  // ---------- bigger views (card viewer) ----------
+  var DEMO_HELP = "These are <b>test figures</b>. Upload your statements, holdings or calendar with the \ud83d\udcce paperclip to see your own numbers.";
+  var SLIDE_HELP = {
+    overview: "Your total net worth: equities, crypto, hard and private assets, and cash, with today\u2019s change. " + DEMO_HELP,
+    stocks: "Your stock positions with live price, today\u2019s move and position value. Tap a row for the full holding. " + DEMO_HELP,
+    crypto: "Your crypto wallets and exchange balances. Tap a row for the full holding. " + DEMO_HELP,
+    today: "Today\u2019s meetings and the statements BLACK is reconciling. Connect your calendar from the Calendar button at the top. " + DEMO_HELP,
+    activity: "What BLACK\u2019s agents did in the last 12 hours, newest first."
+  };
+  function view(list, i) {
+    if (!window.BLACK_VIEW) return;
+    viewing = true;
+    window.BLACK_VIEW.open(list, i, { onClose: function () { viewing = false; } });
   }
-  function render(n) {
-    var s = SLIDES[cur], t = totals(), html = "";
-    var shown = phase === "build" ? n : 99;
+  function bvList(pairs) { return '<div class="bv-list">' + pairs.map(function (x) { return "<div><span>" + x[0] + "</span><b>" + x[1] + "</b></div>"; }).join("") + "</div>"; }
+  function goAct(i, label) { return { label: label || "Open full slide \u2192", run: function () { go(i); } }; }
+  function openSlides(i) {
+    view(SLIDES.map(function (s, j) {
+      return { kicker: s.doc, title: s.h, html: '<div class="ws-slide">' + build(j, 99, true) + "</div>", help: SLIDE_HELP[s.id], action: j === cur ? null : goAct(j, "Show on workspace \u2192") };
+    }), i);
+  }
+  function openKpis(i) {
+    var t = totals(), all = stocks.concat(crypto);
+    var movers = all.slice().sort(function (a, b) { return Math.abs((b.p - b.o) * b.q) - Math.abs((a.p - a.o) * a.q); });
+    var nw = function (v) { return money(v) + " \u00b7 " + (v / t.nw * 100).toFixed(1) + "%"; };
+    view([
+      { kicker: "Net worth", title: money(t.nw, "c"), html: '<p class="bv-sub">' + (t.pnl >= 0 ? "+" : "") + money(t.pnl, "c") + " today</p>" +
+          bvList([["Equities", nw(t.eq)], ["Crypto", nw(t.cr)], ["Hard & private", nw(t.hd)], ["Cash", nw(t.cash)]]), help: SLIDE_HELP.overview, action: goAct(0) },
+      { kicker: "Today\u2019s P&L", title: (t.pnl >= 0 ? "+" : "") + money(t.pnl, "c"), html: '<p class="bv-sub">Biggest moves today, stocks and crypto</p>' +
+          bvList(movers.map(function (x) { var d = (x.p - x.o) * x.q; return [x.s + " \u00b7 " + x.n, '<span class="' + (d >= 0 ? "up" : "down") + '">' + (d >= 0 ? "+" : "") + money(d) + " (" + pct(x) + ")</span>"]; })),
+        help: "Profit or loss since today\u2019s open across your stock and crypto positions. " + DEMO_HELP, action: goAct(1) },
+      { kicker: "Liquid cash", title: money(t.cash, "c"), html: '<p class="bv-sub">' + (t.cash / t.nw * 100).toFixed(1) + "% of net worth \u00b7 target 15%</p>" +
+          bvList(statements.map(function (x) { return [x.n, x.p >= 100 ? (x.warn ? "\u26a0 " + x.warn : "\u2714 Reconciled") : "\u27f3 " + Math.round(x.p) + "%"]; })),
+        help: "Cash you can use now, from your bank and brokerage cash balances. " + DEMO_HELP, action: goAct(3, "Open statements \u2192") },
+      { kicker: "BLACK agents", title: (3 + (cur % 3)) + " running", html: '<p class="bv-sub">2 need your approval</p>' +
+          bvList(SLIDES[cur].tasks.map(function (x) { return [x[0], x[1]]; }).concat([["Needs approval", "Rebalance preview"], ["Needs approval", "Card statement \u00b7 1 item untagged"]])),
+        help: "The AI engines BLACK is running for you right now, and anything waiting for your OK.", action: goAct(4, "Open activity \u2192") }
+    ], i);
+  }
+  function openRows(idx, g, r) {
+    var s = SLIDES[idx], t = totals(), items = [];
+    var hold = function (x, tot) {
+      return { kicker: s.h, title: x.s + " \u00b7 " + x.n, html: '<div class="bv-big">' + money(x.p, "c") + '</div><p class="bv-sub"><span class="' + (up(x) ? "up" : "down") + '">' + pct(x) + "</span> today</p>" +
+        bvList([["Quantity", x.q.toLocaleString()], ["Position value", money(x.p * x.q, "c")], ["Today\u2019s P&L", (x.p >= x.o ? "+" : "") + money((x.p - x.o) * x.q, "c")], ["Share of " + s.h.toLowerCase(), (x.p * x.q / tot * 100).toFixed(1) + "%"]]),
+        help: DEMO_HELP, action: { label: "Ask BLACK about " + x.s + " \u2192", run: function () { ask("What's the outlook for " + x.n + " (" + x.s + ") and should I change my position?"); } } };
+    };
+    if (s.id === "overview") items = [["Equities", t.eq], ["Crypto", t.cr], ["Hard & private", t.hd], ["Cash", t.cash]].map(function (x, j) {
+      return { kicker: "Net worth", title: x[0], html: '<div class="bv-big">' + money(x[1], "c") + '</div><p class="bv-sub">' + (x[1] / t.nw * 100).toFixed(1) + "% of net worth</p>", help: DEMO_HELP, action: [goAct(1), goAct(2), null, null][j] };
+    });
+    else if (s.id === "stocks") items = stocks.map(function (x) { return hold(x, t.eq); });
+    else if (s.id === "crypto") items = crypto.map(function (x) { return hold(x, t.cr); });
+    else if (s.id === "today" && g === "m") items = meetings.map(function (x) {
+      return { kicker: "Meeting", title: x.n, html: '<div class="bv-big">' + (x.allDay ? "All day" : hm(x.t)) + '</div><p class="bv-sub">' + esc(x.tag || "") + "</p>",
+        help: realMeetings ? "From your BLACK calendar." : DEMO_HELP, action: window.BLACK_CAL ? { label: "Open calendar \u2192", run: function () { window.BLACK_CAL.openDrawer(); } } : null };
+    });
+    else if (s.id === "today") items = statements.map(function (x) {
+      return { kicker: "Statement", title: x.n, html: '<div class="bv-big">' + (x.p >= 100 ? "Reconciled" : Math.round(x.p) + "%") + '</div><p class="bv-sub">' + (x.warn ? "\u26a0 " + x.warn : x.p >= 100 ? "All items matched" : "BLACK is matching transactions") + "</p>",
+        help: DEMO_HELP, action: { label: "\ud83d\udcce Upload a statement", run: function () { var b = document.getElementById("attach-btn"); if (b) b.click(); } } };
+    });
+    else if (s.id === "activity") items = feed.slice(0, 5).map(function (f) {
+      return { kicker: "Agent activity", title: f[1], html: '<div class="bv-big">' + f[0] + '</div><p class="bv-sub">' + (f[2] ? "At " + f[2] : "Earlier today") + "</p>", help: SLIDE_HELP.activity };
+    });
+    if (items.length) view(items, r);
+  }
+  function ask(q) { var p = document.getElementById("prompt"); if (!p) return; p.value = q; p.focus(); p.dispatchEvent(new Event("input", { bubbles: true })); }
+
+  // ---------- slide renderers ----------
+  var plain = false; // true while building html for the viewer (rows are not clickable there)
+  function rows(list, fn, n, g) {
+    return list.map(function (x, i) {
+      return '<div class="ws-row' + (i < n ? " in" : "") + (plain ? "" : ' bv-tap" role="button" tabindex="0" data-r="' + i + '"' + (g ? ' data-g="' + g + '"' : "") + ' aria-label="Open details') + '" style="--d:' + i * 90 + 'ms">' + fn(x) + "</div>";
+    }).join("");
+  }
+  function render(n) { $("ws-slide").innerHTML = build(cur, n, false); }
+  function build(idx, n, forView) {
+    plain = !!forView;
+    var s = SLIDES[idx], t = totals(), html = "";
+    var shown = forView || phase !== "build" ? 99 : n;
     if (s.id === "overview") {
       var min = Math.min.apply(null, history), max = Math.max.apply(null, history);
       var pts = history.map(function (v, i) { return (i / (history.length - 1) * 300).toFixed(1) + "," + (70 - (v - min) / (max - min || 1) * 62).toFixed(1); }).join(" ");
@@ -187,20 +275,21 @@
         rows(hard, function (x) { return '<span class="nm">' + x.n + "<small>" + x.d + "</small></span><b>" + money(x.v) + '</b><span class="tag">' + x.tag + "</span>"; }, shown);
     } else if (s.id === "today") {
       html = '<div class="ws-cols"><div><h5>' + (realMeetings ? "Today · your calendar" : "Today") + "</h5>" +
-        (meetings.length ? rows(meetings, function (x) { return "<span class='tm'>" + (x.allDay ? "All day" : hm(x.t)) + "</span><span class='nm'>" + esc(x.n) + "<small>" + esc(x.tag) + "</small></span>"; }, shown)
+        (meetings.length ? rows(meetings, function (x) { return "<span class='tm'>" + (x.allDay ? "All day" : hm(x.t)) + "</span><span class='nm'>" + esc(x.n) + "<small>" + esc(x.tag) + "</small></span>"; }, shown, "m")
           : '<div class="ws-row in"><span class="tm">—</span><span class="nm">No meetings today<small>Type "schedule…" to book one</small></span></div>') +
         "</div><div><h5>Statements</h5>" +
         rows(statements, function (x) {
           var st = x.p >= 100 ? (x.warn ? "⚠ " + x.warn : "✔ Reconciled") : "⟳ " + Math.round(x.p) + "%";
           return "<span class='nm'>" + x.n + "<small class='" + (x.p >= 100 && !x.warn ? "up" : x.warn && x.p >= 100 ? "warn" : "") + "'>" + st + "</small></span>";
-        }, shown) + "</div></div>";
+        }, shown, "s") + "</div></div>";
     } else if (s.id === "activity") {
       var mx = Math.max.apply(null, events);
       html = '<div class="ws-sum"><span>Agent events per hour · last 12h</span><b>' + sum(events, function (x) { return x; }) + " events</b></div>" +
         '<div class="ws-chart">' + events.map(function (v, i) { return '<i style="--h:' + (v / mx * 100).toFixed(0) + '%"' + (i === events.length - 1 ? ' class="now"' : "") + "></i>"; }).join("") + "</div>" +
-        '<div class="ws-feed">' + feed.slice(0, 5).map(function (f, i) { return '<div class="ws-row in' + (i === 0 ? " fresh" : "") + '"><span class="tm">' + (f[2] || "") + "</span><span class='ic'>" + f[0] + "</span><span class='nm'>" + f[1] + "</span></div>"; }).join("") + "</div>";
+        '<div class="ws-feed">' + feed.slice(0, 5).map(function (f, i) { return '<div class="ws-row in' + (i === 0 ? " fresh" : "") + (plain ? '"' : ' bv-tap" role="button" tabindex="0" data-r="' + i + '"') + '><span class="tm">' + (f[2] || "") + "</span><span class='ic'>" + f[0] + "</span><span class='nm'>" + f[1] + "</span></div>"; }).join("") + "</div>";
     }
-    $("ws-slide").innerHTML = html;
+    plain = false;
+    return html;
   }
 
   // One-line agent status: the step being worked on, or the routing trail once built.
@@ -231,8 +320,16 @@
     render(0); kpis();
   }
 
+  function finishBuild() {
+    phase = "live"; stepN = SLIDES[cur].tasks.length;
+    root.classList.remove("working"); root.classList.add("built");
+    $("ws-job").textContent = "Your " + SLIDES[cur].t.toLowerCase();
+    $("ws-clock").textContent = "LIVE";
+    $("ws-sub").textContent = tasksHtml(stepN);
+    render(99); kpis();
+  }
   function tick() {
-    if (paused || hidden) return;
+    if (paused || hidden || viewing) return;
     n++;
     $("ws-clock").textContent = phase === "build" ? ((Date.now() - t0) / 1000).toFixed(1) + "s" : "LIVE";
     var second = n % 4 === 0;
@@ -250,14 +347,9 @@
     if (phase === "build") {
       if (n % STEP_TICKS) return;
       stepN++;
-      if (stepN >= SLIDES[cur].tasks.length) {
-        phase = "live";
-        root.classList.remove("working"); root.classList.add("built");
-        $("ws-job").textContent = "Your " + SLIDES[cur].t.toLowerCase();
-        $("ws-clock").textContent = "LIVE";
-      }
+      if (stepN >= SLIDES[cur].tasks.length) { finishBuild(); return; }
       $("ws-sub").textContent = tasksHtml(stepN);
-      render(phase === "build" ? stepN * 2 : 99); kpis();
+      render(stepN * 2); kpis();
       return;
     }
     if (!userPaused && ++holdTicks >= HOLD_TICKS) { go((cur + 1) % SLIDES.length); return; }
