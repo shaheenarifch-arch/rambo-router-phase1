@@ -541,7 +541,7 @@
       if (k.tagName === "FIGURE") return { kicker: "Chart", title: (k.querySelector("figcaption") || {}).textContent || "Chart", html: k.innerHTML, help: help };
       var label = (k.querySelector("span") || {}).textContent || "", value = (k.querySelector("b") || {}).textContent || "", note = (k.querySelector("small") || {}).textContent || "";
       return { kicker: label, title: value, html: note ? '<p class="bv-sub">' + esc(note) + "</p>" : "", help: help,
-        action: { label: "Ask BLACK about this \u2192", run: function () { el.prompt.value = "Tell me more about " + label + " (" + value + ")" + (note ? ": " + note : "") + "."; el.prompt.focus(); onInput(); } } };
+        action: { label: "Know more \u2192", hint: "BLACK answers this right away, using the best engine for it", run: function () { if (busy) return; el.prompt.value = "Tell me more about " + label + " (" + value + ")" + (note ? ": " + note : "") + "."; onInput(); el.form.requestSubmit(); } } };
     }), cards.indexOf(c));
   });
 

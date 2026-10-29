@@ -260,7 +260,7 @@
     var hold = function (x, tot) {
       return { kicker: s.h, title: x.s + " \u00b7 " + x.n, html: '<div class="bv-big">' + money(x.p, "c") + '</div><p class="bv-sub"><span class="' + (up(x) ? "up" : "down") + '">' + pct(x) + "</span> today</p>" +
         bvList([["Quantity", x.q.toLocaleString()], ["Position value", money(x.p * x.q, "c")], ["Today\u2019s P&L", (x.p >= x.o ? "+" : "") + money((x.p - x.o) * x.q, "c")], ["Share of " + s.h.toLowerCase(), (x.p * x.q / tot * 100).toFixed(1) + "%"]]),
-        help: DEMO_HELP, action: { label: "Ask BLACK about " + x.s + " \u2192", run: function () { ask("What's the outlook for " + x.n + " (" + x.s + ") and should I change my position?"); } } };
+        help: DEMO_HELP, action: know("What's the outlook for " + x.n + " (" + x.s + ") and should I change my position?"), link: quote(x.s, s.id === "crypto") };
     };
     if (s.id === "overview") items = [["Equities", t.eq], ["Crypto", t.cr], ["Hard & private", t.hd], ["Cash", t.cash]].map(function (x, j) {
       return { kicker: "Net worth", title: x[0], html: '<div class="bv-big">' + money(x[1], "c") + '</div><p class="bv-sub">' + (x[1] / t.nw * 100).toFixed(1) + "% of net worth</p>", help: DEMO_HELP, action: [goAct("stocks"), goAct("crypto"), goAct("assets"), goAct("alloc", "Open allocation \u2192")][j] };
@@ -277,12 +277,12 @@
     });
     else if (s.id === "strategic") items = initiatives.map(function (x) {
       return { kicker: "Strategic initiative", title: x.n, html: '<div class="bv-big">' + x.st + "</div>" + bvList([["Budget used", x.spend + "%"], ["Value delivered", x.value + "%"], ["Status", { g: "Green \u00b7 on track", a: "Amber \u00b7 at risk", r: "Red \u00b7 needs review" }[x.rag]]]),
-        help: SLIDE_HELP.strategic, action: { label: "Ask BLACK about " + x.n + " \u2192", run: function () { ask("Give me a status brief on " + x.n + ": risks, spend versus value, and what I should decide."); } } };
+        help: SLIDE_HELP.strategic, action: know("Give me a status brief on " + x.n + ": risks, spend versus value, and what I should decide.") };
     });
     else if (s.id === "alloc") items = [["Equities", t.eq], ["Hard & private", t.hd], ["Crypto", t.cr], ["Cash", t.cash]].map(function (x) {
       var a = x[1] / t.nw * 100, d = a - targets[x[0]];
       return { kicker: "Allocation", title: x[0], html: '<div class="bv-big">' + a.toFixed(1) + '%</div><p class="bv-sub">Target ' + targets[x[0]] + "% \u00b7 " + (d > 0 ? "+" : "") + d.toFixed(1) + " pts</p>" + bvList([["Value", money(x[1], "c")], ["To reach target", (d > 0 ? "Reduce " : "Add ") + money(Math.abs(d) / 100 * t.nw)]]),
-        help: SLIDE_HELP.alloc, action: { label: "Ask BLACK to rebalance \u2192", run: function () { ask("Draft rebalance options to bring my allocation back to target, with the trade-offs."); } } };
+        help: SLIDE_HELP.alloc, action: know("Draft rebalance options to bring my " + x[0].toLowerCase() + " allocation back to target, with the trade-offs.") };
     });
     else if (s.id === "assets") items = hard.map(function (x) {
       return { kicker: "Asset", title: x.n, html: '<div class="bv-big">' + money(x.v, "c") + '</div><p class="bv-sub">' + x.d + "</p>" + bvList([["Valuation", x.tag], ["Share of hard & private", (x.v / t.hd * 100).toFixed(1) + "%"]]), help: SLIDE_HELP.assets };
@@ -292,7 +292,14 @@
     });
     if (items.length) view(items, r);
   }
-  function ask(q) { var p = document.getElementById("prompt"); if (!p) return; p.value = q; p.focus(); p.dispatchEvent(new Event("input", { bubbles: true })); }
+  // "Know more": send the question straight to BLACK. RAMBO routes it to the right engine and the answer opens.
+  function ask(q) {
+    var p = document.getElementById("prompt"), f = document.getElementById("composer"); if (!p) return;
+    p.value = q; p.dispatchEvent(new Event("input", { bubbles: true }));
+    if (f && f.requestSubmit) f.requestSubmit(); else p.focus();
+  }
+  function know(q) { return { label: "Know more \u2192", hint: "BLACK answers this right away, using the best engine for it", run: function () { ask(q); } }; }
+  function quote(sym, isCrypto) { return { label: (isCrypto ? sym : sym) + " live quote \u2197", url: "https://finance.yahoo.com/quote/" + encodeURIComponent(isCrypto ? sym + "-USD" : sym) }; }
 
   // ---------- slide renderers ----------
   var plain = false; // true while building html for the viewer (rows are not clickable there)

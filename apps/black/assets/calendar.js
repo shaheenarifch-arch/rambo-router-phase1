@@ -63,6 +63,7 @@
     return api("").then(function (j) {
       user = j.user; info = j.calendar; write(USER_KEY, JSON.stringify(user));
       if (j.profile && window.BLACK_NAME) window.BLACK_NAME.fromAccount(j.profile.name);
+      if (j.profile && j.profile.theme && window.BLACK_THEME) window.BLACK_THEME.fromAccount(j.profile.theme);
       emit();
       if (info && info.configured && info.tz !== TZ) api("/settings", { method: "PUT", body: { tz: TZ } }).catch(function () {});
       loadUpcoming();
@@ -347,11 +348,14 @@
   renderAccount();
   if (token) refreshMe();
 
+  function saveProfile(fields) { return token && info && info.configured ? api("/profile", { method: "PUT", body: fields }).catch(function () {}) : Promise.resolve(); }
+
   window.BLACK_CAL = {
     isScheduling: isScheduling, isCalendarQuestion: isCalendarQuestion, propose: propose, contextBlock: contextBlock,
     hasCalendar: hasCalendar, connectCard: connectCard,
     signedIn: function () { return !!token; },
-    saveName: function (name) { return token && info && info.configured ? api("/profile", { method: "PUT", body: { name: name } }).catch(function () {}) : Promise.resolve(); }, openSignIn: openSignIn, openDrawer: openDrawer,
+    saveName: function (name) { return saveProfile({ name: name }); },
+    saveProfile: saveProfile, openSignIn: openSignIn, openDrawer: openDrawer,
     onChange: function (f) { listeners.push(f); }
   };
 })();

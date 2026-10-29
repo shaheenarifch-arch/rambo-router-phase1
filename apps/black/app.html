@@ -13,7 +13,16 @@
 <link rel="stylesheet" href="assets/black.css?v=3">
 <link rel="stylesheet" href="assets/workspace.css?v=6">
 <link rel="stylesheet" href="assets/calendar.css?v=2">
-<link rel="stylesheet" href="assets/viewer.css?v=1">
+<link rel="stylesheet" href="assets/viewer.css?v=2">
+<link rel="stylesheet" href="assets/theme.css?v=1">
+<script>
+  // Theme before first paint (Dark / Light / Auto), so the page never flashes the wrong colours.
+  try {
+    var m = localStorage.getItem("black.theme") || "dark";
+    var t = m === "auto" ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark") : m;
+    document.documentElement.setAttribute("data-theme", t === "light" ? "light" : "dark");
+  } catch (e) {}
+</script>
 <script>
   // Preview gate: send visitors without access back to the unlock screen.
   try { if (localStorage.getItem("black.access") !== "preview") location.replace("index.html?unlock=1"); } catch (e) {}
@@ -322,11 +331,12 @@ body{height:100vh;height:100dvh;overflow:hidden}
 </aside>
 
 <script src="config.js"></script>
-<script src="assets/viewer.js?v=1"></script>
-<script src="assets/workspace.js?v=9"></script>
+<script src="assets/viewer.js?v=2"></script>
+<script src="assets/workspace.js?v=10"></script>
 <script src="assets/statement.js?v=1"></script>
 <script src="assets/attach.js?v=3"></script>
-<script src="assets/calendar.js?v=4"></script>
-<script src="assets/app.js?v=19"></script>
+<script src="assets/calendar.js?v=5"></script>
+<script src="assets/theme.js?v=1"></script>
+<script src="assets/app.js?v=20"></script>
 </body>
 </html>
