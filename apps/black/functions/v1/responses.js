@@ -67,6 +67,17 @@ const SYSTEM =
   "then the reasoning, risks and next steps. Use short markdown sections (### headings) and bullet points. Be specific and concise. " +
   "If you are unsure or lack current data, say so plainly instead of guessing.";
 
+// Fast and Smart: a quick, direct answer, not a report. Deep and Executive keep the full SYSTEM style.
+const QUICK =
+  "You are BLACK, the executive AI of GetServices.ai. Give a smart, quick answer: lead with the answer in one or two sentences, " +
+  "then at most 3 short bullet points with the key data (numbers, dates, names). Keep the text under 120 words. " +
+  "No headings, tables, mockups, ASCII diagrams or long sections unless the user explicitly asks for detail. " +
+  "When numbers compare or trend, add ONE chart as a fenced code block with language 'chart' containing only JSON like " +
+  "{\"type\":\"bar\",\"title\":\"Revenue by quarter ($M)\",\"labels\":[\"Q1\",\"Q2\"],\"values\":[1.2,1.8]} (type is bar or line, at most 10 points). " +
+  "If sources help, end with a line 'Sources:' and up to 3 markdown links [title](https://...) to real, well-known pages you are confident exist; never invent URLs. " +
+  "If you are unsure or lack current data, say so plainly instead of guessing.";
+const systemFor = (mode) => (mode === "fast" || mode === "smart" ? QUICK : SYSTEM);
+
 const MAX_MESSAGES = 12;
 const MAX_CHARS = 24000;
 const TIMEOUT_MS = 55000;
@@ -114,7 +125,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
     const failures = [];
     for (let i = 0; i < order.length; i++) {
       try {
-        const r = await call(order[i], env, tier, messages);
+        const r = await call(order[i], env, tier, messages, systemFor(mode));
         if (i > 0) reasons.push("FALLBACK_FROM_" + order[0].toUpperCase());
         return json(shape({ requestId, mode, started, provider: order[i], model: r.model, text: r.text, reasons, fallbackUsed: i > 0, usage: r.usage }));
       } catch (e) { failures.push(failure(order[i], e)); }
@@ -171,27 +182,27 @@ function model(env, provider, tier) {
   return env[up + "_MODEL" + t] || (tier === "smart" ? env[up + "_MODEL"] : null) || env[up + "_MODEL"] || DEFAULT_MODELS[provider][tier];
 }
 
-async function call(provider, env, tier, messages) {
+async function call(provider, env, tier, messages, sys = SYSTEM) {
   const m = model(env, provider, tier);
   if (provider === "anthropic") {
     const j = await post("https://api.anthropic.com/v1/messages", {
       "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01"
-    }, { model: m, max_tokens: 4096, system: SYSTEM, messages });
+    }, { model: m, max_tokens: 4096, system: sys, messages });
     return { model: j.model || m, text: (j.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n"), usage: { inputTokens: j.usage?.input_tokens, outputTokens: j.usage?.output_tokens } };
   }
   if (provider === "openai") {
     const j = await post("https://api.openai.com/v1/chat/completions", { authorization: "Bearer " + env.OPENAI_API_KEY },
-      { model: m, messages: [{ role: "system", content: SYSTEM }, ...messages] });
+      { model: m, messages: [{ role: "system", content: sys }, ...messages] });
     return { model: j.model || m, text: j.choices?.[0]?.message?.content || "", usage: { inputTokens: j.usage?.prompt_tokens, outputTokens: j.usage?.completion_tokens } };
   }
   if (provider === "xai") {
     const j = await post("https://api.x.ai/v1/chat/completions", { authorization: "Bearer " + env.XAI_API_KEY },
-      { model: m, messages: [{ role: "system", content: SYSTEM }, ...messages] });
+      { model: m, messages: [{ role: "system", content: sys }, ...messages] });
     return { model: j.model || m, text: j.choices?.[0]?.message?.content || "", usage: { inputTokens: j.usage?.prompt_tokens, outputTokens: j.usage?.completion_tokens } };
   }
   if (provider === "gemini") {
     const j = await post(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`, { "x-goog-api-key": env.GEMINI_API_KEY }, {
-      systemInstruction: { parts: [{ text: SYSTEM }] },
+      systemInstruction: { parts: [{ text: sys }] },
       contents: messages.map((x) => ({ role: x.role === "assistant" ? "model" : "user", parts: [{ text: x.content }] }))
     });
     const text = (j.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("");
@@ -201,7 +212,7 @@ async function call(provider, env, tier, messages) {
     // Perplexity Agent API (Sonar Chat Completions was retired 2026-09-27). Web search is built in.
     const convo = messages.map((x) => (x.role === "user" ? "User: " : "Assistant: ") + x.content).join("\n\n");
     const j = await post("https://api.perplexity.ai/v1/agent", { authorization: "Bearer " + env.PERPLEXITY_API_KEY },
-      { effort: m, input: SYSTEM + "\n\n" + convo });
+      { effort: m, input: sys + "\n\n" + convo });
     return { model: j.model ? "web · " + j.model : "web search", text: agentText(j), usage: {} };
   }
   throw new Error("UNKNOWN_PROVIDER");
@@ -317,7 +328,7 @@ async function liveSingle({ env, send, mode, tier, order, messages, taskType, re
   const failures = [];
   for (let i = 0; i < order.length; i++) {
     if (i > 0) await send("switch", { from: LABEL[order[i - 1]], to: LABEL[order[i]], reason: failures[failures.length - 1].error });
-    const r = await runEngine({ env, send, provider: order[i], tier, messages, target: "final", timeoutMs: ENGINE_TIMEOUT_MS });
+    const r = await runEngine({ env, send, provider: order[i], tier, messages, target: "final", timeoutMs: ENGINE_TIMEOUT_MS, system: systemFor(mode) });
     if (r.ok) {
       if (i > 0) reasons.push("FALLBACK_FROM_" + order[0].toUpperCase());
       if (r.partial) reasons.push("PARTIAL_TIMEOUT");
