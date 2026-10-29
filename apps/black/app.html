@@ -11,8 +11,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/black.css?v=3">
-<link rel="stylesheet" href="assets/workspace.css?v=4">
+<link rel="stylesheet" href="assets/workspace.css?v=5">
 <link rel="stylesheet" href="assets/calendar.css?v=2">
+<link rel="stylesheet" href="assets/viewer.css?v=1">
 <script>
   // Preview gate: send visitors without access back to the unlock screen.
   try { if (localStorage.getItem("black.access") !== "preview") location.replace("index.html?unlock=1"); } catch (e) {}
@@ -37,6 +38,15 @@ body{height:100vh;height:100dvh;overflow:hidden}
 .main{display:flex;flex-direction:column;min-width:0;min-height:0}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 22px;border-bottom:1px solid var(--line)}
 .topbar .left{display:flex;align-items:center;gap:12px;min-width:0}
+.rail-collapse{margin-left:auto;width:30px;height:30px;border-radius:9px;border:1px solid var(--line);color:var(--muted);display:inline-flex;align-items:center;justify-content:center}
+.rail-collapse:hover{border-color:var(--line-gold);color:var(--gold)}
+.rail-top{display:flex;align-items:center;gap:8px}
+@media(min-width:861px){
+  .rail-collapsed .shell{grid-template-columns:0 1fr}
+  .rail-collapsed .rail{visibility:hidden;overflow:hidden;padding:0;border:0}
+  .rail-collapsed .rail-toggle{display:inline-flex}
+  .shell{transition:grid-template-columns .25s}
+}
 .rail-toggle{display:none;width:38px;height:38px;border-radius:10px;border:1px solid var(--line);align-items:center;justify-content:center}
 .status{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:6px 12px;white-space:nowrap}
 .status .led{width:7px;height:7px;border-radius:50%;background:var(--warn)}
@@ -208,7 +218,8 @@ body{height:100vh;height:100dvh;overflow:hidden}
 <body>
 <div class="shell">
   <aside class="rail" id="rail" aria-label="Briefs">
-    <a href="index.html" class="wordmark">BLACK<svg width="1em" height="1em" class="bk-logo" viewBox="0 0 64 64" role="img" aria-label="GetServices.ai"><defs><linearGradient id="bk-gold-app" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="64" y2="64"><stop offset="0" stop-color="#fff4c8"/><stop offset=".45" stop-color="#e3c46b"/><stop offset="1" stop-color="#9a7414"/></linearGradient></defs><g stroke="url(#bk-gold-app)" stroke-width="3.37"><line x1="32" y1="23.67" x2="32" y2="7.51"/><line x1="39.21" y1="27.84" x2="53.21" y2="19.76"/><line x1="39.21" y1="36.16" x2="53.21" y2="44.24"/><line x1="32" y1="40.33" x2="32" y2="56.49"/><line x1="24.79" y1="36.16" x2="10.79" y2="44.24"/><line x1="24.79" y1="27.84" x2="10.79" y2="19.76"/></g><g fill="url(#bk-gold-app)"><circle cx="32" cy="7.51" r="5.51"/><circle cx="53.21" cy="19.76" r="5.51"/><circle cx="53.21" cy="44.24" r="5.51"/><circle cx="32" cy="56.49" r="5.51"/><circle cx="10.79" cy="44.24" r="5.51"/><circle cx="10.79" cy="19.76" r="5.51"/><path fill-rule="evenodd" d="M32,21.59 L41.01,26.8 L41.01,37.2 L32,42.41 L22.99,37.2 L22.99,26.8 Z M32,27.1 L36.24,29.55 L36.24,34.45 L32,36.9 L27.76,34.45 L27.76,29.55 Z"/></g></svg></a>
+    <div class="rail-top"><a href="index.html" class="wordmark">BLACK<svg width="1em" height="1em" class="bk-logo" viewBox="0 0 64 64" role="img" aria-label="GetServices.ai"><defs><linearGradient id="bk-gold-app" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="64" y2="64"><stop offset="0" stop-color="#fff4c8"/><stop offset=".45" stop-color="#e3c46b"/><stop offset="1" stop-color="#9a7414"/></linearGradient></defs><g stroke="url(#bk-gold-app)" stroke-width="3.37"><line x1="32" y1="23.67" x2="32" y2="7.51"/><line x1="39.21" y1="27.84" x2="53.21" y2="19.76"/><line x1="39.21" y1="36.16" x2="53.21" y2="44.24"/><line x1="32" y1="40.33" x2="32" y2="56.49"/><line x1="24.79" y1="36.16" x2="10.79" y2="44.24"/><line x1="24.79" y1="27.84" x2="10.79" y2="19.76"/></g><g fill="url(#bk-gold-app)"><circle cx="32" cy="7.51" r="5.51"/><circle cx="53.21" cy="19.76" r="5.51"/><circle cx="53.21" cy="44.24" r="5.51"/><circle cx="32" cy="56.49" r="5.51"/><circle cx="10.79" cy="44.24" r="5.51"/><circle cx="10.79" cy="19.76" r="5.51"/><path fill-rule="evenodd" d="M32,21.59 L41.01,26.8 L41.01,37.2 L32,42.41 L22.99,37.2 L22.99,26.8 Z M32,27.1 L36.24,29.55 L36.24,34.45 L32,36.9 L27.76,34.45 L27.76,29.55 Z"/></g></svg></a>
+      <button type="button" class="rail-collapse" id="rail-collapse" aria-label="Hide briefs column" title="Hide briefs column (bring it back with the ☰ button at the top)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button></div>
     <button class="btn btn-ghost btn-sm new" id="new-brief">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
       New brief
@@ -311,9 +322,10 @@ body{height:100vh;height:100dvh;overflow:hidden}
 </aside>
 
 <script src="config.js"></script>
-<script src="assets/workspace.js?v=5"></script>
+<script src="assets/viewer.js?v=1"></script>
+<script src="assets/workspace.js?v=6"></script>
 <script src="assets/attach.js?v=2"></script>
 <script src="assets/calendar.js?v=3"></script>
-<script src="assets/app.js?v=16"></script>
+<script src="assets/app.js?v=17"></script>
 </body>
 </html>

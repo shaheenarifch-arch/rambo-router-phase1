@@ -102,3 +102,13 @@
 .ws-clock{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--gold);font-size:11px;letter-spacing:.08em}
 @media(max-width:860px){.ws-top{flex-wrap:wrap}.ws-tabs{margin-left:0;order:3;width:100%}.ws-play{margin-left:auto}}
 @media(max-width:520px){.ws-job{display:none}.ws-sub::before{display:none}}
+/* skip, details and expand in the RAMBO status line */
+.ws-skip,.ws-det,.ws-exp{flex:none;border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:11px;color:var(--muted);background:transparent;white-space:nowrap}
+.ws-skip:hover,.ws-det:hover,.ws-exp:hover{border-color:var(--line-gold);color:var(--gold)}
+.ws-skip{display:none}.ws.working .ws-skip{display:inline-block;color:var(--gold);border-color:var(--line-gold)}
+.ws-det{margin-left:auto}
+.ws-status .ws-clock{margin-left:6px}
+.ws:not(.show-d) .ws-sub{display:none}
+.ws-cover{cursor:zoom-in}
+.ws-cover .ws-row.bv-tap{cursor:pointer}
+@media(max-width:520px){.ws-exp{display:none}}
