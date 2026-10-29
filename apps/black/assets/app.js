@@ -15,6 +15,7 @@
     [/\b(debug|error|exception|stack trace|fails?)\b/i, "debugging"],
     [/\b(code|typescript|javascript|python|api|function|class)\b/i, "coding"],
     [/\b(architecture|system design|database schema|microservice)\b/i, "architecture"],
+    [/\b(latest|current(ly)?|today|this (week|month|quarter|year)|news|right now|stock price|share price|exchange rate|in 20\d\d|20\d\d (sales|results|revenue|deliveries|numbers))\b/i, "live_research"],
     [/\b(seo|keyword|meta description|search ranking)\b/i, "seo_content"],
     [/\b(product|supplier|listing|sku|catalog)\b/i, "product_research"],
     [/\b(market|competitor|trend)\b/i, "market_analysis"],
@@ -25,7 +26,7 @@
   var LABELS = {
     debugging: "Debugging", coding: "Coding", architecture: "Architecture", seo_content: "SEO content",
     product_research: "Product research", market_analysis: "Market analysis", business_strategy: "Business strategy",
-    summarization: "Summary", extraction: "Extraction", general_chat: "General"
+    summarization: "Summary", extraction: "Extraction", live_research: "Live research", general_chat: "General"
   };
   function classify(text) {
     for (var i = 0; i < RULES.length; i++) if (RULES[i][0].test(text)) return RULES[i][1];
@@ -157,7 +158,9 @@
       stick = nearBottom();
       pending.remove();
       res.meta.latencyMs = res.meta.latencyMs || Math.round(performance.now() - started);
-      addAnswer(res.meta, res.content);
+      var ans = addAnswer(res.meta, res.content);
+      if (stick && ans) requestAnimationFrame(function () { el.scroll.scrollTop += ans.getBoundingClientRect().top - el.scroll.getBoundingClientRect().top - 16; });
+      stick = false;
       current.messages.push({ role: "assistant", content: res.content, meta: res.meta });
       save();
     }).catch(function (err) {
@@ -342,7 +345,7 @@
     }
     function later() { if (!renderT) renderT = setTimeout(paint, 120); }
     return {
-      remove: function () { clearInterval(tick); d.remove(); },
+      remove: function () { clearInterval(tick); if (renderT) clearTimeout(renderT); renderT = -1; d.remove(); },
       timeline: function () {
         return order.map(function (k) { var r = rows[k]; return { label: r.label, model: r.model, status: r.status, ms: r.ms, tokens: r.tokens, partial: !!r.partial, error: r.error }; });
       },
@@ -436,6 +439,7 @@
       a.appendChild(fr);
     }
     d.appendChild(a); el.thread.appendChild(d);
+    return d;
   }
   function chip(parent, k, v, warn) {
     var s = document.createElement("span"); s.className = "chip" + (warn ? " warn" : "");
@@ -480,16 +484,46 @@
       '<defs><linearGradient id="bk-chart-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6e19a"/><stop offset="1" stop-color="#b8902f"/></linearGradient></defs>' +
       '<line x1="' + P + '" y1="' + y(0) + '" x2="' + (W - P) + '" y2="' + y(0) + '" stroke="rgba(255,255,255,.12)"/>' + marks + vlabels + xl + "</svg></figure>";
   }
+  // ```kpis [{label,value,note}]``` -> gold data cards.
+  function kpiCards(src) {
+    var a; try { a = JSON.parse(src.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"')); } catch (e) { return null; }
+    if (!Array.isArray(a) || !a.length) return null;
+    return '<div class="kpis">' + a.slice(0, 4).map(function (k, i) {
+      return '<div class="kpi" style="--d:' + i * 90 + 'ms"><span>' + esc(String(k.label || "")).slice(0, 40) + "</span><b>" + esc(String(k.value || "")).slice(0, 24) + "</b>" +
+        (k.note ? "<small>" + esc(String(k.note)).slice(0, 48) + "</small>" : "") + "</div>";
+    }).join("") + "</div>";
+  }
+  // Shown while a data block is still streaming in, instead of raw JSON.
+  function building(kind) {
+    return '<div class="building ' + kind + '"><span class="rpulse"></span>BLACK is building your ' + (kind === "kpis" ? "data cards" : kind === "chart" ? "chart" : "block") + "…<i></i><i></i><i></i></div>";
+  }
   function md(src) {
-    var out = [], blocks = esc(src || "").split(/```/);
+    var out = [], blocks = esc(src || "").split(/```/), open = blocks.length % 2 === 0;
     blocks.forEach(function (chunk, i) {
       if (i % 2) {
-        var c = /^chart\s*\n/.test(chunk) ? chartSvg(chunk.replace(/^chart\s*\n/, "")) : null;
-        out.push(c || "<pre><code>" + chunk.replace(/^\w*\n/, "") + "</code></pre>"); return;
+        var lang = (chunk.match(/^(\w*)/) || [])[1], body = chunk.replace(/^\w*\s*\n?/, "");
+        if (open && i === blocks.length - 1) { var kind = "kpis".indexOf(lang) === 0 ? "kpis" : "chart".indexOf(lang) === 0 ? "chart" : null;
+          out.push(kind ? building(kind) : "<pre><code>" + body + "</code></pre>"); return; }
+        var c = lang === "chart" ? chartSvg(body) : lang === "kpis" ? kpiCards(body) : null;
+        out.push(c || (lang === "chart" || lang === "kpis" ? "" : "<pre><code>" + body + "</code></pre>")); return;
       }
-      var list = null;
+      var list = null, table = null;
+      function flushTable() {
+        if (!table) return;
+        var head = table[0], rows = table.slice(1);
+        out.push('<div class="tbl"><table><thead><tr>' + head.map(function (c) { return "<th>" + inline(c) + "</th>"; }).join("") + "</tr></thead><tbody>" +
+          rows.map(function (r) { return "<tr>" + r.map(function (c) { return "<td>" + inline(c) + "</td>"; }).join("") + "</tr>"; }).join("") + "</tbody></table></div>");
+        table = null;
+      }
       chunk.split("\n").forEach(function (line) {
         var t = line.trim();
+        if (/^\|.*\|$/.test(t)) {
+          if (list) { out.push("<ul>" + list.join("") + "</ul>"); list = null; }
+          if (/^\|[\s:|-]+\|$/.test(t)) return; // |---|---| separator
+          (table = table || []).push(t.slice(1, -1).split("|").map(function (c) { return c.trim(); }));
+          return;
+        }
+        flushTable();
         if (/^[-*] /.test(t)) { if (!list) { list = []; } list.push("<li>" + inline(t.slice(2)) + "</li>"); return; }
         if (list) { out.push("<ul>" + list.join("") + "</ul>"); list = null; }
         if (!t) return;
@@ -497,6 +531,7 @@
         out.push(hm ? "<h3>" + inline(hm[1]) + "</h3>" : "<p>" + inline(t) + "</p>");
       });
       if (list) out.push("<ul>" + list.join("") + "</ul>");
+      flushTable();
     });
     return out.join("");
   }
