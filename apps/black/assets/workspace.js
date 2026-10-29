@@ -107,7 +107,7 @@
   ];
   var viewing = false;
 
-  // ---------- the user's name ("Shaheen's Command Workspace"), remembered on this device and with their account ----------
+  // ---------- the user's name ("Shaheen Executive Workspace"), remembered on this device and with their account ----------
   var NAME_KEY = "black.name", nameListeners = [];
   function cleanName(n) { return String(n || "").replace(/[<>"`]/g, "").replace(/\s+/g, " ").trim().slice(0, 40); }
   function getName() { try { return cleanName(localStorage.getItem(NAME_KEY)); } catch (e) { return ""; } }
@@ -153,13 +153,12 @@
       '<button type="button" id="ws-upload-btn">\ud83d\udcce Upload files</button></div>';
 
   var $ = function (id) { return document.getElementById(id); };
-  function possessive(n) { return n + (/s$/i.test(n) ? "\u2019" : "\u2019s"); }
   function renderWho(asking) {
     var n = getName(), box = $("ws-who");
     if (n && !asking) {
-      box.innerHTML = '<span class="ws-kicker"><span class="ws-name"></span> Command Workspace</span>' +
+      box.innerHTML = '<span class="ws-kicker"><span class="ws-name"></span> Executive Workspace</span>' +
         '<button type="button" class="ws-name-edit" id="ws-name-edit" aria-label="Change your name" title="Change what BLACK calls you">\u270e</button>';
-      box.querySelector(".ws-name").textContent = possessive(n);
+      box.querySelector(".ws-name").textContent = n;
       $("ws-name-edit").addEventListener("click", function () { renderWho(true); });
       return;
     }
