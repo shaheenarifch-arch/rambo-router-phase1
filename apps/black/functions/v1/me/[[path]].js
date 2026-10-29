@@ -123,19 +123,23 @@ async function meInfo(env, user, request) {
       configured: true, linked: !!s.ical_url, tz: s.tz || null, videoLink: s.video_link || "",
       feedUrl: new URL(request.url).origin + "/v1/me/feed/" + s.feed_secret + ".ics"
     };
-    const p = await env.BLACK_DB.prepare(`SELECT display_name FROM black_profiles WHERE user_id = ?`).bind(user.id).first();
-    out.profile = { name: (p && p.display_name) || "" };
+    const p = await env.BLACK_DB.prepare(`SELECT display_name, theme FROM black_profiles WHERE user_id = ?`).bind(user.id).first();
+    out.profile = { name: (p && p.display_name) || "", theme: (p && p.theme) || "" };
   }
   return json(out);
 }
 
-// What BLACK calls the user ("Shaheen's Command Workspace"), kept with their account so it follows them to any device.
+// The user's BLACK profile, kept with their account so it follows them to any device:
+// the name BLACK calls them ("Shaheen Executive Workspace") and their theme (dark / light / auto).
+// Only the fields sent are changed.
 async function saveProfile(request, env, user) {
   const b = await body(request);
-  const name = String(b.name || "").replace(/[<>"`]/g, "").replace(/\s+/g, " ").trim().slice(0, 40);
-  await env.BLACK_DB.prepare(`INSERT INTO black_profiles (user_id, display_name, updated_at) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET display_name = excluded.display_name, updated_at = excluded.updated_at`)
-    .bind(user.id, name, Date.now()).run();
-  return json({ ok: true, name });
+  const cur = (await env.BLACK_DB.prepare(`SELECT display_name, theme FROM black_profiles WHERE user_id = ?`).bind(user.id).first()) || {};
+  const name = b.name !== undefined ? String(b.name || "").replace(/[<>"`]/g, "").replace(/\s+/g, " ").trim().slice(0, 40) : cur.display_name || "";
+  const theme = ["dark", "light", "auto"].includes(b.theme) ? b.theme : cur.theme || null;
+  await env.BLACK_DB.prepare(`INSERT INTO black_profiles (user_id, display_name, theme, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET display_name = excluded.display_name, theme = excluded.theme, updated_at = excluded.updated_at`)
+    .bind(user.id, name, theme, Date.now()).run();
+  return json({ ok: true, name, theme });
 }
 
 // ---------------- storage (D1) ----------------
@@ -146,9 +150,11 @@ async function ensureSchema(env) {
     env.BLACK_DB.prepare(`CREATE TABLE IF NOT EXISTS cal_users (user_id TEXT PRIMARY KEY, email TEXT, ical_url TEXT, feed_secret TEXT UNIQUE, tz TEXT, video_link TEXT, updated_at INTEGER)`),
     env.BLACK_DB.prepare(`CREATE TABLE IF NOT EXISTS cal_events (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT NOT NULL, start_ms INTEGER NOT NULL, end_ms INTEGER NOT NULL, tz TEXT, attendees TEXT, location TEXT, notes TEXT, status TEXT NOT NULL DEFAULT 'confirmed', seq INTEGER NOT NULL DEFAULT 0, created_at INTEGER, updated_at INTEGER)`),
     env.BLACK_DB.prepare(`CREATE INDEX IF NOT EXISTS cal_events_user_start ON cal_events (user_id, start_ms)`),
-    env.BLACK_DB.prepare(`CREATE TABLE IF NOT EXISTS black_profiles (user_id TEXT PRIMARY KEY, display_name TEXT, updated_at INTEGER)`),
+    env.BLACK_DB.prepare(`CREATE TABLE IF NOT EXISTS black_profiles (user_id TEXT PRIMARY KEY, display_name TEXT, theme TEXT, updated_at INTEGER)`),
     env.BLACK_DB.prepare(`CREATE TABLE IF NOT EXISTS cal_contacts (user_id TEXT NOT NULL, name TEXT NOT NULL, email TEXT NOT NULL, updated_at INTEGER, PRIMARY KEY (user_id, name))`)
   ]);
+  // Added after black_profiles first shipped; harmless when the column already exists.
+  await env.BLACK_DB.prepare(`ALTER TABLE black_profiles ADD COLUMN theme TEXT`).run().catch(() => {});
   schemaReady = true;
 }
 

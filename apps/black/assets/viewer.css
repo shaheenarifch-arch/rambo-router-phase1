@@ -27,7 +27,9 @@
 .bv-help a{color:var(--gold);text-decoration:underline;text-underline-offset:2px}
 .bv-foot{display:flex;align-items:center;gap:8px;margin-top:16px}
 .bv-foot #bv-next{margin-left:auto}
-.bv-foot #bv-act{margin-left:auto}
+.bv-foot #bv-act,.bv-foot .bv-link:not([hidden]){margin-left:auto}
+.bv-foot .bv-link:not([hidden])+#bv-act{margin-left:0}
+.bv-link[hidden]{display:none}
 .bv-foot #bv-act:not([hidden])+#bv-next{margin-left:0}
 .bv-foot button:disabled{opacity:.35;cursor:default}
 .bv-keys{margin-top:10px;font-size:11px;color:var(--dim);text-align:center}

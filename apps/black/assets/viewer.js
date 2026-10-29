@@ -1,6 +1,6 @@
 /* BLACK card viewer: opens any card in a bigger view with Back / Next / Close.
  * window.BLACK_VIEW.open(items, index, { onClose }) where each item is
- *   { kicker, title, html, help, action: { label, run } }
+ *   { kicker, title, html, help, action: { label, hint, run }, link: { label, url } }
  * Keyboard: ← → to move, Esc to close. Touch: swipe left / right.
  */
 (function () {
@@ -21,6 +21,7 @@
       '<details class="bv-help" id="bv-help-wrap"><summary>What this means</summary><div id="bv-help"></div></details>' +
       '<div class="bv-foot">' +
         '<button type="button" class="btn btn-ghost btn-sm" id="bv-prev">← Back</button>' +
+        '<a class="btn btn-ghost btn-sm bv-link" id="bv-link" target="_blank" rel="noopener" hidden></a>' +
         '<button type="button" class="btn btn-gold btn-sm" id="bv-act" hidden></button>' +
         '<button type="button" class="btn btn-ghost btn-sm" id="bv-next">Next →</button>' +
       "</div>" +
@@ -44,7 +45,10 @@
     $("bv-prev").hidden = $("bv-next").hidden = items.length < 2;
     var act = $("bv-act");
     act.hidden = !it.action;
-    if (it.action) act.textContent = it.action.label;
+    if (it.action) { act.textContent = it.action.label; act.title = it.action.hint || ""; }
+    var ln = $("bv-link");
+    ln.hidden = !it.link;
+    if (it.link) { ln.textContent = it.link.label; ln.href = it.link.url; ln.title = "Opens in a new tab"; }
   }
   function open(list, index, o) {
     if (!list || !list.length) return;
