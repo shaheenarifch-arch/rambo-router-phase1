@@ -540,14 +540,14 @@
     return '<div class="building ' + kind + '"><span class="rpulse"></span>BLACK is building your ' + (kind === "kpis" ? "data cards" : kind === "chart" ? "chart" : "block") + "…<i></i><i></i><i></i></div>";
   }
   function md(src) {
-    var out = [], blocks = esc(src || "").split(/```/), open = blocks.length % 2 === 0;
+    var out = [], top = [], blocks = esc(src || "").split(/```/), open = blocks.length % 2 === 0;
     blocks.forEach(function (chunk, i) {
       if (i % 2) {
         var lang = (chunk.match(/^(\w*)/) || [])[1], body = chunk.replace(/^\w*\s*\n?/, "");
         if (open && i === blocks.length - 1) { var kind = "kpis".indexOf(lang) === 0 ? "kpis" : "chart".indexOf(lang) === 0 ? "chart" : null;
-          out.push(kind ? building(kind) : "<pre><code>" + body + "</code></pre>"); return; }
+          (kind === "kpis" ? top : out).push(kind ? building(kind) : "<pre><code>" + body + "</code></pre>"); return; }
         var c = lang === "chart" ? chartSvg(body) : lang === "kpis" ? kpiCards(body) : null;
-        out.push(c || (lang === "chart" || lang === "kpis" ? "" : "<pre><code>" + body + "</code></pre>")); return;
+        (lang === "kpis" ? top : out).push(c || (lang === "chart" || lang === "kpis" ? "" : "<pre><code>" + body + "</code></pre>")); return;
       }
       var list = null, table = null;
       function flushTable() {
@@ -575,6 +575,6 @@
       if (list) out.push("<ul>" + list.join("") + "</ul>");
       flushTable();
     });
-    return out.join("");
+    return top.join("") + out.join("");
   }
 })();

@@ -20,7 +20,8 @@
  */
 
 const DEFAULT_MODELS = {
-  anthropic: { fast: "claude-haiku-5-5", smart: "claude-sonnet-5-5", deep: "claude-opus-5-5" },
+  // Smart runs on Haiku with thinking off so the first words arrive in about a second. Synthesis keeps Sonnet.
+  anthropic: { fast: "claude-haiku-5-5", smart: "claude-haiku-5-5", deep: "claude-opus-5-5", synth: "claude-sonnet-5-5" },
   openai: { fast: "gpt-5.4-mini", smart: "gpt-5.6-sol", deep: "gpt-5.6-sol" },
   gemini: { fast: "gemini-4-argon", smart: "gemini-4-argon", deep: "gemini-4-argon" },
   perplexity: { fast: "fast", smart: "medium", deep: "high" }, // Agent API "effort" levels
@@ -73,10 +74,10 @@ const SYSTEM =
 // Fast and Smart: a quick, direct answer, not a report. Deep and Executive keep the full SYSTEM style.
 const QUICK =
   "You are BLACK, the executive AI of GetServices.ai. Answer like a visual executive brief, not an essay. Use this order:\n" +
-  "1) A fenced code block with language 'kpis' containing only a JSON array of 2 to 4 key figures, e.g. " +
+  "1) The answer in one or two sentences. Start writing it immediately.\n" +
+  "2) A fenced code block with language 'kpis' containing only a JSON array of 2 to 4 key figures, e.g. " +
   "[{\"label\":\"Projected ARR lift\",\"value\":\"+18%\",\"note\":\"next 12 months\"},{\"label\":\"Main risk\",\"value\":\"Churn\",\"note\":\"SMB plans\"}]. " +
   "Values are short (numbers, %, $, or one or two words). Always include this block.\n" +
-  "2) The answer in one or two sentences.\n" +
   "3) At most 3 short bullet points with supporting data (numbers, dates, names).\n" +
   "4) Whenever any numbers can be compared or trended, ONE fenced code block with language 'chart' containing only JSON like " +
   "{\"type\":\"bar\",\"title\":\"Revenue by quarter ($M)\",\"labels\":[\"Q1\",\"Q2\"],\"values\":[1.2,1.8]} (type is bar or line, at most 10 points). " +
@@ -189,9 +190,18 @@ async function executive({ env, order, messages, taskType, requestId, started })
 }
 const cand = (c) => ({ model: LABEL[c.provider] + " · " + c.model, text: c.text });
 
+// Quick tiers answer at low effort; Haiku can also skip thinking entirely (Sonnet/Opus 5.5 reject "disabled").
+function claudeSpeed(m, tier) {
+  if (tier !== "fast" && tier !== "smart") return {};
+  const x = { output_config: { effort: "low" } };
+  if (/haiku/i.test(m)) x.thinking = { type: "disabled" };
+  return x;
+}
+
 // ---------- providers (native fetch, no SDKs — same approach as RAMBO's adapters) ----------
 function model(env, provider, tier) {
   const up = provider.toUpperCase();
+  if (tier === "synth") return env[up + "_MODEL_SYNTH"] || DEFAULT_MODELS[provider].synth || model(env, provider, "smart");
   const t = tier === "deep" ? "_DEEP" : tier === "fast" ? "_FAST" : "";
   return env[up + "_MODEL" + t] || (tier === "smart" ? env[up + "_MODEL"] : null) || env[up + "_MODEL"] || DEFAULT_MODELS[provider][tier];
 }
@@ -201,7 +211,7 @@ async function call(provider, env, tier, messages, sys = SYSTEM) {
   if (provider === "anthropic") {
     const j = await post("https://api.anthropic.com/v1/messages", {
       "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01"
-    }, { model: m, max_tokens: 4096, system: sys, messages });
+    }, { model: m, max_tokens: 4096, system: sys, messages, ...claudeSpeed(m, tier) });
     return { model: j.model || m, text: (j.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n"), usage: { inputTokens: j.usage?.input_tokens, outputTokens: j.usage?.output_tokens } };
   }
   if (provider === "openai") {
@@ -358,7 +368,7 @@ async function liveSingle({ env, send, mode, tier, order, messages, taskType, re
 async function liveExecutive({ env, send, order, messages, taskType, requestId, started }) {
   const panel = order.slice(0, 3);
   const judge = order.includes("anthropic") ? "anthropic" : panel[0];
-  const synthTier = env.SYNTH_TIER === "deep" ? "deep" : "smart";
+  const synthTier = env.SYNTH_TIER === "deep" ? "deep" : "synth";
   await send("route", {
     mode: "executive", taskType, reasons: [REASON[taskType], "EXECUTIVE_PARALLEL_" + panel.length],
     engines: panel.map((e) => engineInfo(env, e, "deep")), judge: engineInfo(env, judge, synthTier)
@@ -430,7 +440,7 @@ async function stream(provider, env, tier, messages, { onDelta, timeoutMs, syste
     if (provider === "anthropic") {
       url = "https://api.anthropic.com/v1/messages";
       headers = { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" };
-      payload = { model: m, max_tokens: 4096, system: sys, messages, stream: true };
+      payload = { model: m, max_tokens: 4096, system: sys, messages, stream: true, ...claudeSpeed(m, tier) };
       onData = (j) => {
         if (j.type === "message_start" && j.message) { out.model = j.message.model || m; out.usage.inputTokens = j.message.usage && j.message.usage.input_tokens; }
         else if (j.type === "content_block_delta" && j.delta && j.delta.type === "text_delta") add(j.delta.text);

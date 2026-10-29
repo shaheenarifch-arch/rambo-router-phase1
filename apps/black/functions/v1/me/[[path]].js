@@ -280,7 +280,8 @@ async function propose(request, env, user) {
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({ model: env.ANTHROPIC_MODEL_FAST || "claude-haiku-5-5", max_tokens: 600, system: sys, messages: [{ role: "user", content: prompt }] })
+    body: JSON.stringify({ model: env.ANTHROPIC_MODEL_FAST || "claude-haiku-5-5", max_tokens: 600, system: sys, messages: [{ role: "user", content: prompt }],
+      output_config: { effort: "low" }, ...(/haiku/i.test(env.ANTHROPIC_MODEL_FAST || "claude-haiku-5-5") ? { thinking: { type: "disabled" } } : {}) })
   });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw Object.assign(new Error("BLACK couldn't read that request right now."), { status: 502, code: "PARSE_FAILED" });
