@@ -139,9 +139,11 @@
         "</div>" +
       "</div>" +
     "</div>" +
-    '<p class="ws-note">Fictional figures for design and demo. Connect your brokerage, exchange, calendar and bank feeds to see your real numbers.</p>';
+    '<div class="ws-upload" role="note"><span><b>You\u2019re seeing test data.</b> Upload your files (Excel or CSV: statements, portfolios, holdings) with the \ud83d\udcce paperclip to see your real-time data.</span>' +
+      '<button type="button" id="ws-upload-btn">\ud83d\udcce Upload files</button></div>';
 
   var $ = function (id) { return document.getElementById(id); };
+  $("ws-upload-btn").addEventListener("click", function () { var b = document.getElementById("attach-btn"); if (b) { b.focus(); b.click(); } });
   $("ws-rail").innerHTML = SLIDES.map(function (x, i) { return '<button type="button" data-i="' + i + '"><span>' + esc(x.t) + "</span></button>"; }).join("");
   [$("ws-tabs"), $("ws-rail")].forEach(function (box) {
     box.addEventListener("click", function (e) { var b = e.target.closest("button"); if (b) go(+b.dataset.i); });
