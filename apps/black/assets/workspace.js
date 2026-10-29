@@ -44,7 +44,7 @@
     { t: at(13, 0), n: "Tax advisor", tag: "3 documents" },
     { t: at(16, 30), n: "Deal review", tag: "Deck drafting" }
   ];
-  var realMeetings = false; // true once the signed-in user's calendar replaces the demo meetings
+  var realMeetings = false, realStatements = false, realCash = false; // true once the signed-in user's calendar replaces the demo meetings
   var statements = [
     { n: "Brokerage · " + monthName(), p: 100 },
     { n: "Private bank · " + monthName(), p: 100 },
@@ -124,7 +124,7 @@
       '<span class="ws-cover-k" id="ws-cover-k"></span><span class="ws-cover-h gold-text" id="ws-cover-h"></span>' +
       '<div class="ws-slide" id="ws-slide" aria-live="polite"></div>' +
     "</div>" +
-    '<div class="ws-upload" role="status"><span class="ws-info" aria-hidden="true">i</span><span><b>You\u2019re seeing test data.</b> Upload your files (Excel or CSV: statements, portfolios, holdings) with the \ud83d\udcce paperclip to see your real-time data.</span>' +
+    '<div class="ws-upload" role="status"><span class="ws-info" aria-hidden="true">i</span><span><b>You\u2019re seeing test data.</b> Upload your files with the \ud83d\udcce paperclip to see your real-time data: bank statements (OFX, QFX, CSV or PDF), holdings (Excel or CSV) or a calendar (.ics).</span>' +
       '<button type="button" id="ws-upload-btn">\ud83d\udcce Upload files</button></div>';
 
   var $ = function (id) { return document.getElementById(id); };
@@ -155,7 +155,7 @@
     $("ws-kpis").innerHTML =
       kpi("Net worth", money(t.nw), (t.pnl >= 0 ? "▲ " : "▼ ") + (Math.abs(t.pnl) / (t.nw - t.pnl) * 100).toFixed(2) + "% today", t.pnl >= 0, 0) +
       kpi("Today's P&L", (t.pnl >= 0 ? "+" : "") + money(t.pnl), "Stocks and crypto", t.pnl >= 0, 1) +
-      kpi("Liquid cash", money(t.cash), (t.cash / t.nw * 100).toFixed(1) + "% of net worth", null, 2) +
+      kpi("Liquid cash", money(t.cash), realCash ? "From your statement" : (t.cash / t.nw * 100).toFixed(1) + "% of net worth", null, 2) +
       kpi("BLACK agents", tasks + " running", "2 need your approval", null, 3);
   }
   function kpi(k, v, s, good, i) {
@@ -195,7 +195,7 @@
         help: "Profit or loss since today\u2019s open across your stock and crypto positions. " + DEMO_HELP, action: goAct(1) },
       { kicker: "Liquid cash", title: money(t.cash, "c"), html: '<p class="bv-sub">' + (t.cash / t.nw * 100).toFixed(1) + "% of net worth \u00b7 target 15%</p>" +
           bvList(statements.map(function (x) { return [x.n, x.p >= 100 ? (x.warn ? "\u26a0 " + x.warn : "\u2714 Reconciled") : "\u27f3 " + Math.round(x.p) + "%"]; })),
-        help: "Cash you can use now, from your bank and brokerage cash balances. " + DEMO_HELP, action: goAct(3, "Open statements \u2192") },
+        help: realCash ? "Closing balance from the bank statement you uploaded. Upload more statements to include other accounts." : "Cash you can use now, from your bank and brokerage cash balances. " + DEMO_HELP, action: goAct(3, "Open statements \u2192") },
       { kicker: "BLACK agents", title: (3 + (cur % 3)) + " running", html: '<p class="bv-sub">2 need your approval</p>' +
           bvList(SLIDES[cur].tasks.map(function (x) { return [x[0], x[1]]; }).concat([["Needs approval", "Rebalance preview"], ["Needs approval", "Card statement \u00b7 1 item untagged"]])),
         help: "The AI engines BLACK is running for you right now, and anything waiting for your OK.", action: goAct(4, "Open activity \u2192") }
@@ -364,6 +364,17 @@
     pause: function () { paused = true; },
     resume: function () { paused = false; go(cur); },
     // Real meetings from the BLACK calendar: [{ start, title, tag, allDay }]
+    // An uploaded bank statement replaces the test statements, and its closing balance becomes Liquid cash.
+    setStatement: function (st) {
+      if (!realStatements) statements = [];
+      realStatements = true;
+      statements.unshift({ n: st.label, p: 100, warn: null, real: true });
+      statements.length = Math.min(statements.length, 4);
+      if (typeof st.closing === "number") { CASH = st.closing; realCash = true; }
+      var note = root.querySelector(".ws-upload span:nth-child(2)");
+      if (note) note.innerHTML = "<b>Using your statement</b> for Liquid cash and Statements. Other figures are still test data; upload holdings or more statements with the \ud83d\udcce paperclip.";
+      kpis(); if (SLIDES[cur].id === "today" || SLIDES[cur].id === "overview") render(99);
+    },
     setMeetings: function (list) {
       meetings = (list || []).slice(0, 5).map(function (m) { return { t: new Date(m.start), n: m.title, tag: m.tag || "", allDay: !!m.allDay }; });
       realMeetings = true;
