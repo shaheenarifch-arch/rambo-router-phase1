@@ -331,7 +331,7 @@
     }
     d.appendChild(b); el.thread.appendChild(d); scrollEnd();
   }
-  var STATUS = { queued: "Queued", thinking: "Thinking…", writing: "Writing…", done: "Done", failed: "Failed", skipped: "Standby" };
+  var STATUS = { queued: "Queued", thinking: "Thinking…", writing: "Writing…", done: "Done", failed: "Failed", skipped: "Standby", cancelled: "Cancelled" };
   // Live Engines card: shows RAMBO's route, each engine's status, timer and output as it streams in.
   function addPending() {
     var d = document.createElement("div"); d.className = "msg";
@@ -372,6 +372,7 @@
       if (info.status === "failed") st = "Failed · " + (info.error || "error");
       if (info.status === "done" && info.partial) st = "Done (cut off at time limit)";
       if (info.status === "skipped") st = "Standby · not needed";
+      if (info.status === "cancelled") st = "Cancelled · " + (info.error || "another engine answered first");
       r.li.querySelector(".st").textContent = st;
       if (typeof info.ms === "number" && (info.status === "done" || info.status === "failed")) r.time.textContent = (info.ms / 1000).toFixed(1) + "s";
       var bits = [];
@@ -425,7 +426,8 @@
           if (x.status === "skipped") { var fh2 = $q(".final-head"); fh2.hidden = false; fh2.textContent = "Synthesis skipped · using the strongest answer from " + x.label; }
         } else if (ev === "switch") {
           var s2 = document.createElement("p"); s2.className = "switch";
-          s2.textContent = "↪ " + x.from + " didn't answer (" + x.reason + "). Switching to " + x.to + ".";
+          s2.textContent = x.hedge ? "⇉ " + x.from + " hasn't started (" + x.reason + "). Racing " + x.to + " in parallel; first to stream wins."
+            : "↪ " + x.from + " didn't answer (" + x.reason + "). Switching to " + x.to + ".";
           $q(".switches").appendChild(s2);
         } else if (ev === "delta") {
           if (x.target === "final") finalText += x.text;
