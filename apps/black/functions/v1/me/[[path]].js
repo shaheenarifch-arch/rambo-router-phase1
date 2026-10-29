@@ -85,11 +85,14 @@ async function login(request, env) {
 async function providers(env) {
   const r = await fetch(atlas(env) + "/auth/providers").catch(() => null);
   const j = r && r.ok ? await r.json().catch(() => ({})) : {};
-  const list = (Array.isArray(j.providers) ? j.providers : Array.isArray(j) ? j : [])
+  // ATLAS answers { google: true, microsoft: false, password: true, ... }; older shapes were lists.
+  const raw = Array.isArray(j.providers) ? j.providers : Array.isArray(j) ? j
+    : ["google", "microsoft"].filter((id) => j[id] === true).map((id) => ({ id }));
+  const list = raw
     .map((p) => (typeof p === "string" ? { id: p } : p))
     .filter((p) => p && p.id && p.enabled !== false)
     .map((p) => ({
-      id: p.id, label: p.label || p.name || p.id.charAt(0).toUpperCase() + p.id.slice(1),
+      id: p.id, label: p.label || p.name || ({ google: "Google", microsoft: "Microsoft" }[p.id]) || p.id.charAt(0).toUpperCase() + p.id.slice(1),
       url: atlas(env) + "/auth/oauth/" + encodeURIComponent(p.id) + "?redirect=" + encodeURIComponent(SITE + "/app.html")
     }));
   return json({ providers: list, signupUrl: "https://app.getservices.ai/#/signup" });
