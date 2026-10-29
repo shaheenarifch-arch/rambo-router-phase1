@@ -131,6 +131,15 @@ export async function onRequestPost({ request, env, waitUntil }) {
   // "What does Perplexity think?" -> that engine answers first.
   const asked = askedEngine(lastUser, available);
   if (asked) { const at = order.indexOf(asked); if (at >= 0) order.splice(at, 1); order.unshift(asked); }
+  // A brief that names a website: open the site directly (new sites aren't in search indexes yet)
+  // and answer from what is actually on the page.
+  if (taskType === "web_lookup") {
+    const site = await fetchSite(lastUser);
+    if (site) {
+      messages[messages.length - 1] = { role: "user", content: lastUser + "\n\n" + site.block };
+      if (site.ok && !asked && order.includes("anthropic")) { order.splice(order.indexOf("anthropic"), 1); order.unshift("anthropic"); }
+    }
+  }
   const requestId = crypto.randomUUID();
   const started = Date.now();
 
@@ -574,6 +583,42 @@ function askedEngine(text, available) {
   for (const [re, e] of want) if (re.test(text) && available.includes(e)) return e;
   return null;
 }
+// ---------- direct site fetch for web_lookup briefs ----------
+const SITE_RE = /(https?:\/\/[^\s)>\]]+)|\b((?:www\.)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9-]+)*\.(?:com|org|net|ai|io|us|uk|co|app|dev|site|online|store|info|biz|pk|ca|xyz|shop|win|fun|trade|guide|markets|nexus|news|tech))\b/i;
+async function fetchSite(text) {
+  const m = String(text).match(SITE_RE);
+  if (!m) return null;
+  let url = m[1] || "https://" + m[2];
+  try { url = new URL(url).toString(); } catch { return null; }
+  const host = new URL(url).hostname;
+  if (/^(localhost|127\.|10\.|192\.168\.|169\.254\.)/.test(host) || host.endsWith(".local")) return null;
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 6000);
+  try {
+    const r = await fetch(url, { redirect: "follow", signal: ctl.signal, headers: { "user-agent": "Mozilla/5.0 (compatible; BLACK-GetServices/1.0; +https://black.getservices.ai)", accept: "text/html,*/*;q=0.5" } });
+    const type = r.headers.get("content-type") || "";
+    if (!r.ok) return { ok: false, block: `[BLACK tried to open ${url} just now: the site answered HTTP ${r.status}. Say so, and use web search results if you have any.]` };
+    if (!/html|text/i.test(type)) return { ok: false, block: `[BLACK opened ${url}: it returned ${type || "a non-HTML file"}, not a web page.]` };
+    const html = (await r.text()).slice(0, 400000);
+    const pick = (re) => { const x = html.match(re); return x ? clean(x[1]) : ""; };
+    const title = pick(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    const desc = pick(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i) || pick(/<meta[^>]+content=["']([^"']*)["'][^>]+name=["']description["']/i);
+    const heads = [...html.matchAll(/<h[1-3][^>]*>([\s\S]*?)<\/h[1-3]>/gi)].map((x) => clean(x[1])).filter(Boolean).slice(0, 20);
+    const body = clean(html.replace(/<(script|style|noscript|svg|template)[\s\S]*?<\/\1>/gi, " ").replace(/<head[\s\S]*?<\/head>/i, " ")).slice(0, 5000);
+    return {
+      ok: true,
+      block: `[Live page BLACK opened just now: ${r.url || url} (HTTP ${r.status})]\n` +
+        (title ? `Title: ${title}\n` : "") + (desc ? `Description: ${desc}\n` : "") +
+        (heads.length ? `Headings: ${heads.join(" | ")}\n` : "") + `Page text (excerpt): ${body}\n` +
+        "[Answer from this page content. It is live, even if web search has nothing about it yet.]"
+    };
+  } catch (e) {
+    return { ok: false, block: `[BLACK tried to open ${url} just now but it ${e && e.name === "AbortError" ? "did not respond within 6 seconds" : "could not be reached"}. Say so, and use web search results if you have any.]` };
+  } finally { clearTimeout(t); }
+}
+function clean(s) {
+  return String(s).replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ").trim();
+}
+
 function classify(text) {
   for (const [re, t] of RULES) if (re.test(text)) return t;
   return "general_chat";
