@@ -146,7 +146,8 @@
   function submit() {
     var att = window.BLACK_ATTACH && window.BLACK_ATTACH.current();
     var text = el.prompt.value.trim(); if ((!text && !att) || busy) return;
-    if (!text) text = "Analyze this spreadsheet: the key totals, trends and anything that needs my attention.";
+    if (!text) text = att && att.kind === "calendar" ? "Summarize my calendar: upcoming meetings, busy days, conflicts and anything I need to prepare for."
+      : "Analyze this spreadsheet: the key totals, trends and anything that needs my attention.";
     var cal = !att && window.BLACK_CAL;
     var scheduling = cal && window.BLACK_CAL.isScheduling(text);
     var calAsk = cal && !scheduling && window.BLACK_CAL.isCalendarQuestion(text);

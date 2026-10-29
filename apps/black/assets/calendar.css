@@ -83,3 +83,6 @@
   .account{padding:0 5px}
   .account .lbl:only-child{display:inline;padding:0 6px}
 }
+.cal-help,.att-help{margin-top:10px;font-size:12px;line-height:1.5;color:var(--dim)}
+.cal-help b{color:var(--muted);font-weight:600}
+.cal-help a,.att-help a{color:var(--gold);text-decoration:underline;text-underline-offset:2px}
