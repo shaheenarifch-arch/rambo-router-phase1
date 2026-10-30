@@ -59,6 +59,8 @@ const ROUTES = {
   seo_content: ["anthropic", "perplexity", "openai", "gemini"],
   summarization: ["anthropic", "gemini", "openai"],
   extraction: ["gemini", "openai", "anthropic"],
+  // Docs Analyst: a brief with an attached spreadsheet or bank statement is answered from that data.
+  docs_analysis: ["gemini", "anthropic", "openai"],
   live_research: ["perplexity", "xai", "gemini", "anthropic", "openai"],
   // Claude is the fallback here because it gets web search + fetch tools for these briefs.
   web_lookup: ["perplexity", "anthropic", "xai", "gemini", "openai"],
@@ -67,7 +69,7 @@ const ROUTES = {
 const REASON = {
   coding: "CODING_SPECIALIST", debugging: "CODING_SPECIALIST", architecture: "DEEP_REASONING",
   business_strategy: "EXECUTIVE_WRITING", market_analysis: "LIVE_WEB_RESEARCH", product_research: "LIVE_WEB_RESEARCH",
-  seo_content: "LONG_FORM_WRITING", live_research: "LIVE_WEB_RESEARCH", web_lookup: "WEB_INTENT", summarization: "SYNTHESIS", extraction: "STRUCTURED_EXTRACTION", general_chat: "GENERAL_DEFAULT"
+  seo_content: "LONG_FORM_WRITING", live_research: "LIVE_WEB_RESEARCH", web_lookup: "WEB_INTENT", summarization: "SYNTHESIS", extraction: "STRUCTURED_EXTRACTION", docs_analysis: "DOCS_ANALYST", general_chat: "GENERAL_DEFAULT"
 };
 
 const SYSTEM =
@@ -125,8 +127,10 @@ export async function onRequestPost({ request, env, waitUntil }) {
   // The gateway's own rules win for briefs that need the live web, so a browser with an older
   // classifier (cached app.js) can't send a website or weather brief to a model without web access.
   const serverTask = classify(lastUser);
-  const taskType = serverTask === "web_lookup" || serverTask === "live_research" ? serverTask
+  let taskType = serverTask === "web_lookup" || serverTask === "live_research" ? serverTask
     : TASKS.has(body.taskType) ? body.taskType : serverTask;
+  // Docs Analyst: an attached spreadsheet or bank statement is answered from that data, Gemini first.
+  if (taskType !== "web_lookup" && taskType !== "live_research" && /\[Attached (spreadsheet|bank statement)/i.test(lastUser)) taskType = "docs_analysis";
   const tier = mode === "executive" ? "deep" : mode;
   const order = (ROUTES[taskType] || ROUTES.general_chat).filter((e) => available.includes(e));
   // "What does Perplexity think?" -> that engine answers first.
