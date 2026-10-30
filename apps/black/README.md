@@ -20,6 +20,7 @@ Static front end for BLACK™, the dark-and-gold executive edition of GetService
 - **Unlock BLACK** opens the modal; **Enter BLACK** grants preview access in that browser and opens the console.
 - `https://black.getservices.ai/?unlock=1` opens the modal directly. The AI Studio "Black Edition" button links here.
 - Payment is not wired yet. The access check is client-side only and is not a paywall.
+- **Sign out** clears the briefs, name, access code and preview access BLACK keeps in that browser, then returns to the landing page. Theme and layout settings stay. An expired session (401) signs out quietly and keeps the briefs.
 
 ## Live answers
 `functions/v1/responses.js` is a Cloudflare Pages Function on this same project, so the console calls it at `/v1/responses` on the same domain.

@@ -70,12 +70,18 @@
       return j;
     }).catch(function () { return null; });
   }
+  // Private data BLACK keeps in this browser. A deliberate sign-out wipes it so the next
+  // person on this browser can't see the previous member's briefs, name or access.
+  // Theme and rail layout are display settings only, so they stay.
+  var PRIVATE_KEYS = ["black.briefs", "black.name", "black.code", "black.access"];
   function signOut(quiet) {
     token = ""; user = null; info = null; cache = null;
     write(KEY, ""); write(USER_KEY, "");
+    if (!quiet) PRIVATE_KEYS.forEach(function (k) { write(k, ""); });
     emit();
     if (drawer) closeDrawer();
-    if (!quiet && window.BLACK_WORKSPACE && window.BLACK_WORKSPACE.setMeetings) location.reload();
+    // quiet = an expired session (401): keep local briefs so nothing is lost; the user can sign in again.
+    if (!quiet) location.replace("index.html");
   }
 
   if (acct) acct.addEventListener("click", function () { user ? openDrawer() : openSignIn(); });
@@ -194,7 +200,7 @@
     });
     bindFoot();
   }
-  function acctFoot() { return '<div class="cal-foot">' + (user ? "Signed in as " + esc(user.email) : "") + ' <button type="button" id="cal-signout">Sign out</button></div>'; }
+  function acctFoot() { return '<div class="cal-foot">' + (user ? "Signed in as " + esc(user.email) : "") + ' <button type="button" id="cal-signout" title="Signs you out and clears your briefs, name and access code from this browser">Sign out</button></div>'; }
   function bindFoot() { var b = $("cal-signout"); if (b) b.addEventListener("click", function () { signOut(false); }); }
   function saveSettings(unlink) {
     var b = { videoLink: $("cal-video").value.trim(), tz: TZ };
