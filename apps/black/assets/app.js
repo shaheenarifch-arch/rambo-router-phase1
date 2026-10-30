@@ -6,9 +6,9 @@
   var API = (CFG.apiBase || "").replace(/\/+$/, "");
   var LIVE = false;
   var STORE = "black.briefs";
-  var CODE_KEY = "black.code";
-  function getCode() { try { return localStorage.getItem(CODE_KEY) || ""; } catch (e) { return ""; } }
-  function setCode(v) { try { v ? localStorage.setItem(CODE_KEY, v) : localStorage.removeItem(CODE_KEY); } catch (e) {} }
+  // Live answers need the GetServices sign-in (calendar.js) and a BLACK plan (plan.js); the old access code is gone.
+  var SESSION_KEY = "black.session";
+  function getToken() { try { return localStorage.getItem(SESSION_KEY) || ""; } catch (e) { return ""; } }
 
   // Same deterministic rules as the RAMBO TaskClassifier (classifier.ts), so the hint matches the router.
   var RULES = [
@@ -55,23 +55,27 @@
   el.studio.href = CFG.studioUrl || "https://studio.getservices.ai";
   var ENGINES = [];
   function setStatus() {
+    var P = window.BLACK_PLAN, s = P ? P.state() : null, b = s && s.black;
+    LIVE = !!ENGINES.length && !!(s && s.signedIn && b && b.active);
     el.status.classList.toggle("live", LIVE);
-    if (LIVE) { el.statusText.textContent = "Live · " + ENGINES.join(" · "); el.status.title = "Connected to the BLACK gateway"; }
-    else if (ENGINES.length) { el.statusText.textContent = "Preview · enter access code"; el.status.title = "Enter your access code for live answers"; }
-    else { el.statusText.textContent = "Preview mode"; el.status.title = "The live gateway isn't configured yet"; }
+    if (!ENGINES.length) { el.statusText.textContent = "Preview mode"; el.status.title = "The live gateway isn't configured yet"; }
+    else if (!s || !s.signedIn) { el.statusText.textContent = "Preview · sign in"; el.status.title = "Sign in with your GetServices account and start your 7-day free trial"; }
+    else if (!b && s.loading) { el.statusText.textContent = "Checking your plan…"; el.status.title = "Plan & billing"; }
+    else if (!LIVE) { el.statusText.textContent = "Preview · start free trial"; el.status.title = "Start your 7-day free trial for live answers: tap to see plans"; }
+    else { el.statusText.textContent = (b.trial ? "Trial" : b.name || "Live") + " · " + ENGINES.join(" · "); el.status.title = "Your plan and usage: tap to open Plan & billing"; }
   }
   function probe() {
     fetch(API + "/v1/responses", { headers: { accept: "application/json" } })
       .then(function (r) { return r.ok ? r.json() : { live: false, engines: [] }; })
-      .then(function (j) { ENGINES = j.engines || []; LIVE = !!j.live && !!getCode(); setStatus(); })
+      .then(function (j) { ENGINES = j.engines || []; setStatus(); })
       .catch(function () { ENGINES = []; LIVE = false; setStatus(); });
   }
+  // The status badge opens Plan & billing: sign in, start the free trial, usage and Manage billing.
   el.status.addEventListener("click", function () {
     if (!ENGINES.length) return;
-    var v = window.prompt(LIVE ? "Change your BLACK access code (leave empty to switch to Preview):" : "Enter your BLACK access code for live answers:", getCode());
-    if (v === null) return;
-    setCode(v.trim()); probe();
+    if (window.BLACK_PLAN) window.BLACK_PLAN.open();
   });
+  if (window.BLACK_PLAN) window.BLACK_PLAN.onChange(setStatus);
   setStatus(); probe();
 
   document.querySelectorAll(".modes button").forEach(function (b) {
@@ -230,6 +234,7 @@
       stick = false;
       current.messages.push({ role: "assistant", content: res.content, meta: res.meta });
       save();
+      if (!res.meta.preview && window.BLACK_PLAN) window.BLACK_PLAN.refresh(); // usage meters
     }).catch(function (err) {
       pending.remove();
       addError(err && err.message ? err.message : "Something went wrong.", function () { dispatch(taskType); });
@@ -248,7 +253,7 @@
     return fetch(API + "/v1/responses", {
       method: "POST",
       credentials: "include",
-      headers: { "content-type": "application/json", accept: "text/event-stream", "x-black-access": getCode() },
+      headers: { "content-type": "application/json", accept: "text/event-stream", authorization: "Bearer " + getToken() },
       body: JSON.stringify(body)
     }).then(function (r) {
       var ct = r.headers.get("content-type") || "";
@@ -318,7 +323,13 @@
     });
   }
   function errorText(status, j) {
-    if (status === 401 || status === 403) { LIVE = false; setStatus(); return "Your access code wasn't accepted. Tap the status badge at the top to enter it again."; }
+    if (status === 401 || status === 403) { if (window.BLACK_PLAN) window.BLACK_PLAN.refresh(); return "Sign in with your GetServices account to get live answers. Tap the status badge at the top."; }
+    if (status === 402) {
+      if (window.BLACK_PLAN) { window.BLACK_PLAN.refresh(); window.BLACK_PLAN.open(); }
+      if (j && j.error === "ALLOWANCE_USED") return "You've used this period's " + ({ quick: "Fast & Smart", deep: "Deep", executive: "Executive" }[j.bucket] || "") + " briefs (" + j.used + " of " + j.limit + "). Move to Pro in Plan & billing, or use another mode until your allowance resets.";
+      return "Start your 7-day free trial to get live answers. Plan & billing is open.";
+    }
+    if (status === 503 && j && j.detail) return j.detail;
     if (status === 413) return "That brief is too long. Shorten it or start a new brief.";
     if (status === 502) return "Every engine failed to answer this time. Try again in a moment.";
     if (status === 424) return "Every engine failed to answer. " + ((j && j.engines) || []).map(function (f) { return f.engine + ": " + f.error; }).join(" · ");
@@ -341,7 +352,7 @@
       "- **Engine:** " + engine
     ];
     if (mode === "executive") lines.push("- **Executive Mode:** sent to at least two independent models in parallel, with disagreements flagged and one synthesis returned");
-    lines.push("", ENGINES.length ? "Tap the status badge at the top and enter your access code to get live answers." : "The live gateway isn't configured yet.");
+    lines.push("", ENGINES.length ? "Sign in and start your 7-day free trial for live answers: tap the status badge at the top, or [compare plans](https://black.getservices.ai/pricing/)." : "The live gateway isn't configured yet.");
     return new Promise(function (resolve) {
       setTimeout(function () {
         resolve({ content: lines.join("\n"), meta: { preview: true, mode: mode, taskType: taskType, reasons: ["PREVIEW_NO_MODEL_CALLED"] } });
