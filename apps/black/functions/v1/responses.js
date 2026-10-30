@@ -7,7 +7,8 @@
  *   route, engine, delta, switch, synth, ping, done, error
  *
  * Secrets (Cloudflare Pages > black-edition > Settings > Variables and secrets):
- *   BLACK_ACCESS_CODE   required: briefs must send header x-black-access with this value
+ * Plans: every brief needs a signed-in GetServices session (Authorization: Bearer <token>) and an
+ *   active BLACK plan with allowance left; see functions/_lib/plan.js (uses BLACK_DB, ATLAS_API_URL).
  *   ANTHROPIC_API_KEY   Claude
  *   OPENAI_API_KEY      GPT
  *   GEMINI_API_KEY      Gemini
@@ -18,6 +19,8 @@
  *   XAI_MODEL, XAI_MODEL_DEEP, XAI_MODEL_FAST.
  * Engines without a key are skipped; routing falls back to the next configured engine.
  */
+
+import { gate } from "../_lib/plan.js";
 
 const DEFAULT_MODELS = {
   // Smart runs on Haiku with thinking off so the first words arrive in about a second. Synthesis keeps Sonnet.
@@ -105,12 +108,10 @@ const PARTIAL_MIN_CHARS = 400;     // a timed-out engine that already wrote this
 const SYNTH_CANDIDATE_CHARS = 7000; // trim each candidate before synthesis so the judge answers faster
 
 export async function onRequestGet({ env }) {
-  return json({ live: engines(env).length > 0 && !!env.BLACK_ACCESS_CODE, engines: engines(env).map((e) => LABEL[e]) });
+  return json({ live: engines(env).length > 0, engines: engines(env).map((e) => LABEL[e]) });
 }
 
 export async function onRequestPost({ request, env, waitUntil }) {
-  if (!env.BLACK_ACCESS_CODE) return json({ error: "GATEWAY_NOT_CONFIGURED" }, 503);
-  if (!safeEqual(request.headers.get("x-black-access") || "", env.BLACK_ACCESS_CODE)) return json({ error: "ACCESS_DENIED" }, 401);
   const available = engines(env);
   if (!available.length) return json({ error: "NO_ENGINES_CONFIGURED" }, 503);
 
@@ -123,6 +124,9 @@ export async function onRequestPost({ request, env, waitUntil }) {
   if (messages.reduce((n, m) => n + m.content.length, 0) > MAX_CHARS) return json({ error: "BRIEF_TOO_LONG" }, 413);
 
   const mode = ["fast", "smart", "deep", "executive"].includes(body.mode) ? body.mode : "smart";
+  // Plans replace the old shared access code: signed-in GetServices account + BLACK plan + allowance left.
+  const access = await gate(request, env, mode);
+  if (access.response) return access.response;
   const lastUser = messages[messages.length - 1].content;
   // The gateway's own rules win for briefs that need the live web, so a browser with an older
   // classifier (cached app.js) can't send a website or weather brief to a model without web access.
@@ -148,12 +152,13 @@ export async function onRequestPost({ request, env, waitUntil }) {
   const requestId = crypto.randomUUID();
   const started = Date.now();
 
-  if (body.stream === true) return live({ env, waitUntil, mode, tier, order, messages, taskType, requestId, started, asked });
+  if (body.stream === true) return live({ env, waitUntil, mode, tier, order, messages, taskType, requestId, started, asked, onFail: access.release });
 
   try {
     if (mode === "executive" && order.length >= 2) {
       const ex = await executive({ env, order, messages, taskType, requestId, started });
-      return ex.failures ? allFailed(ex.failures) : json(ex);
+      if (ex.failures) { await access.release(); return allFailed(ex.failures); }
+      return json(ex);
     }
     // Single answer with ordered fallback.
     const reasons = [REASON[taskType], "MODE_" + mode.toUpperCase()];
@@ -167,8 +172,10 @@ export async function onRequestPost({ request, env, waitUntil }) {
         return json(shape({ requestId, mode, started, provider: order[i], model: r.model, text: r.text, reasons, fallbackUsed: i > 0, usage: r.usage }));
       } catch (e) { failures.push(failure(order[i], e)); }
     }
+    await access.release();
     return allFailed(failures);
   } catch (e) {
+    await access.release();
     return json({ error: "INTERNAL_ERROR", detail: String((e && e.message) || e).slice(0, 160) }, 500);
   }
 }
@@ -316,12 +323,14 @@ async function post(url, headers, payload) {
 //   ping   {t}                           (keep-alive every 8s)
 //   done   <same body as the JSON response>
 //   error  {error, engines?}
-function live({ env, waitUntil, mode, tier, order, messages, taskType, requestId, started, asked }) {
+function live({ env, waitUntil, mode, tier, order, messages, taskType, requestId, started, asked, onFail }) {
   const { readable, writable } = new TransformStream();
   const w = writable.getWriter();
   const enc = new TextEncoder();
   let closed = false;
   const send = (event, data) => {
+    // A brief that ends in an error is given back to the plan allowance.
+    if (event === "error" && onFail) { const p = onFail(); onFail = null; if (typeof waitUntil === "function") waitUntil(p); }
     if (closed) return Promise.resolve();
     return w.write(enc.encode("event: " + event + "\ndata: " + JSON.stringify(data) + "\n\n")).catch(() => { closed = true; });
   };

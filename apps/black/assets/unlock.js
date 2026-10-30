@@ -1,8 +1,8 @@
 /*
  * BLACK unlock flow.
- * Payment is not wired yet: "Enter BLACK" grants preview access in this browser only.
- * When billing is added, replace grantAccess() with the checkout call and have the
- * server confirm the entitlement before the console loads.
+ * Plan buttons (Starter / Pro) open the console with ?subscribe=<plan>: it signs the visitor in
+ * with their GetServices account, then opens Stripe Checkout with a 7-day free trial. The gateway
+ * checks the plan on every brief, so this browser flag only skips the window for returning members.
  */
 (function () {
   var KEY = "black.access";
@@ -22,7 +22,7 @@
     lastFocus = document.activeElement;
     backdrop.classList.add("open");
     backdrop.setAttribute("aria-hidden", "false");
-    var cta = backdrop.querySelector("[data-enter]");
+    var cta = backdrop.querySelector("[data-plan], [data-enter]");
     if (cta) cta.focus();
   }
   function close() {
@@ -43,6 +43,9 @@
     });
   });
   backdrop.querySelector("[data-enter]").addEventListener("click", enter);
+  backdrop.querySelectorAll("[data-plan]").forEach(function (b) {
+    b.addEventListener("click", function () { window.location.href = "app.html?subscribe=" + encodeURIComponent(b.getAttribute("data-plan")); });
+  });
   backdrop.querySelectorAll("[data-close]").forEach(function (el) { el.addEventListener("click", close); });
   backdrop.addEventListener("click", function (e) { if (e.target === backdrop) close(); });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape" && backdrop.classList.contains("open")) close(); });

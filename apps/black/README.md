@@ -8,7 +8,9 @@ Static front end for BLACK™, the dark-and-gold executive edition of GetService
 | `app.html` | BLACK Console: briefs, Fast / Smart / Deep / Executive modes, routing trail |
 | `config.js` | Runtime config (`apiBase`, `applicationId`, `studioUrl`) |
 | `assets/black.css` | Shared dark + gold design tokens and components |
-| `assets/unlock.js` | Unlock flow (preview access; billing comes later) |
+| `assets/unlock.js` | Unlock flow (plan buttons open the console checkout) |
+| `assets/plan.js` | Plan & billing panel in the console: sign-in prompt, 7-day free trial checkout, usage meters, Manage billing |
+| `functions/_lib/plan.js` | Server-side plan check: GetServices sign-in, BLACK plan from ATLAS, monthly brief allowances counted in `BLACK_DB` |
 | `assets/app.js` | Console logic; calls `POST /v1/responses` (streamed) and shows the Live Engines panel |
 | `assets/workspace.js` / `workspace.css` | Command Workspace on the console home: live slides for net worth, stocks, crypto, strategic portfolio, allocation, assets, meetings and statements, activity (demo data) |
 | `assets/attach.js` | Excel/CSV upload: read in the browser with SheetJS (cdnjs, loaded on first use); a compact data summary is added to the brief. Nothing is stored server side |
@@ -19,7 +21,7 @@ Static front end for BLACK™, the dark-and-gold executive edition of GetService
 ## How the unlock works today
 - **Unlock BLACK** opens the modal; **Enter BLACK** grants preview access in that browser and opens the console.
 - `https://black.getservices.ai/?unlock=1` opens the modal directly. The AI Studio "Black Edition" button links here.
-- Payment is not wired yet. The access check is client-side only and is not a paywall.
+- Plans: **Starter $99/mo** and **Pro $299/mo** with a 7-day free trial, and **Enterprise** by enquiry. Billing is Stripe through ATLAS (`atlas-api` `src/black-billing.js`). The gateway checks the signed-in user's plan and allowance on every brief.
 
 ## Live answers
 `functions/v1/responses.js` is a Cloudflare Pages Function on this same project, so the console calls it at `/v1/responses` on the same domain.
@@ -32,10 +34,10 @@ Static front end for BLACK™, the dark-and-gold executive edition of GetService
 - **Fast** and **Smart** give quick answers (under ~120 words) with key data, one inline chart when numbers matter, and up to 3 source links. **Full report →** re-runs the brief in Deep mode. Deep and Executive stay detailed.
 - Synthesis uses the Smart model tier for speed. Set `SYNTH_TIER=deep` to use the Deep tier.
 - Add these secrets in Cloudflare (Pages > black-edition > Settings > Variables and secrets). Any engine without a key is skipped.
-  - `BLACK_ACCESS_CODE` (required)
+  - `BLACK_DB` binding (required for plans: counts briefs per billing period); `ATLAS_API_URL` optional
   - `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `PERPLEXITY_API_KEY`, `XAI_API_KEY`
   - Optional model overrides: `ANTHROPIC_MODEL`, `OPENAI_MODEL_DEEP` and so on (see the top of the function file).
-- Users enter the access code by tapping the status badge in the console. Without it they stay in Preview mode.
+- Live answers need a signed-in GetServices account with an active BLACK plan; the status badge opens Plan & billing. Owners: set `BLACK_OWNER_EMAILS` on ATLAS for unlimited access.
 - NotebookLM isn't included because it has no public API for answering questions. Briefs with an attached spreadsheet or bank statement use the Docs Analyst route instead (Gemini first, then Claude and GPT).
 
 ## Deploy (Cloudflare Pages)
