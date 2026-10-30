@@ -36,7 +36,7 @@ Static front end for BLACK™, the dark-and-gold executive edition of GetService
   - `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `PERPLEXITY_API_KEY`, `XAI_API_KEY`
   - Optional model overrides: `ANTHROPIC_MODEL`, `OPENAI_MODEL_DEEP` and so on (see the top of the function file).
 - Users enter the access code by tapping the status badge in the console. Without it they stay in Preview mode.
-- NotebookLM isn't included because it has no public API for answering questions.
+- NotebookLM isn't included because it has no public API for answering questions. Briefs with an attached spreadsheet or bank statement use the Docs Analyst route instead (Gemini first, then Claude and GPT).
 
 ## Deploy (Cloudflare Pages)
 - Connect this repo, set **root directory** to `apps/black`, no build command, output directory `/`.
