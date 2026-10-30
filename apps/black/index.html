@@ -300,8 +300,11 @@ footer a:hover{color:var(--gold)}
       <li>Full routing transparency: model, reason, latency and cost</li>
       <li>Private brief history</li>
     </ul>
-    <button class="btn btn-gold" data-enter>Enter BLACK</button>
-    <p class="fine">Early access preview. Membership billing is coming soon.</p>
+    <div class="plan-pick" style="display:grid;gap:10px">
+      <button class="btn btn-gold" data-plan="starter">Start 7-day free trial · Starter $99/mo</button>
+      <button class="btn btn-ghost" data-plan="pro">Start 7-day free trial · Pro $299/mo</button>
+    </div>
+    <p class="fine">Card required; no charge for 7 days, cancel any time. <a href="/pricing/">Compare plans</a> · <a href="/pricing/#enterprise">Enterprise</a> · Already a member? <a href="app.html" data-enter>Enter BLACK</a></p>
   </div>
 </div>
 
@@ -362,6 +365,6 @@ if("IntersectionObserver"in window){new IntersectionObserver(function(e){
 },{threshold:.3}).observe(root)}else{seen=true;show(0)}
 })();
 </script>
-<script src="assets/unlock.js"></script>
+<script src="assets/unlock.js?v=2"></script>
 </body>
 </html>
