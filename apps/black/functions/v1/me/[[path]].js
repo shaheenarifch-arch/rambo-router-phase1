@@ -13,6 +13,11 @@
  *   DELETE /v1/me/events/:id         cancel
  *   PUT    /v1/me/settings           {icalUrl, tz, videoLink}
  *   GET    /v1/me/feed/:secret.ics   subscribe feed for Google / Outlook / Apple (no sign-in; secret URL)
+ * Plans (BLACK Starter / Pro, billed by Stripe through ATLAS):
+ *   GET  /v1/me/plan          plan, allowances and usage this billing period
+ *   POST /v1/me/subscribe     {plan} -> Stripe Checkout URL (7-day free trial on the first plan)
+ *   POST /v1/me/portal        Stripe Customer Portal URL (Manage billing)
+ *   GET  /v1/me/config        the ATLAS address the Enterprise form posts to (no sign-in)
  *
  * Bindings and secrets (Cloudflare Pages > black-edition > Settings):
  *   BLACK_DB           D1 database binding (tables are created on first use)
@@ -20,6 +25,8 @@
  *   ATLAS_API_URL      optional, defaults to the live ATLAS API
  *   ANTHROPIC_API_KEY  already set for the gateway; used to understand scheduling briefs
  */
+
+import { planSummary, bearer } from "../../_lib/plan.js";
 
 const ATLAS_DEFAULT = "https://atlas-api-v2.python-tester.workers.dev";
 const SITE = "https://black.getservices.ai";
@@ -47,11 +54,14 @@ async function route({ request, env }, parts, method) {
     if (parts[0] === "login" && method === "POST") return login(request, env);
     if (parts[0] === "providers" && method === "GET") return providers(env);
     if (parts[0] === "feed" && method === "GET") return feed(env, String(parts[1] || "").replace(/\.ics$/i, ""));
+    if (parts[0] === "config" && method === "GET") return json({ atlas: atlas(env) });
 
     // ---- signed in ----
     const user = await userFrom(request, env);
     if (!user) return json({ error: "SIGN_IN_REQUIRED" }, 401);
     if (!parts.length && method === "GET") return meInfo(env, user, request);
+    if (parts[0] === "plan" && method === "GET") return planInfo(request, env);
+    if ((parts[0] === "subscribe" || parts[0] === "portal") && method === "POST") return billing(request, env, parts[0]);
     if (!env.BLACK_DB) return json({ error: "CALENDAR_NOT_CONFIGURED" }, 503);
     await ensureSchema(env);
 
@@ -140,6 +150,27 @@ async function saveProfile(request, env, user) {
   await env.BLACK_DB.prepare(`INSERT INTO black_profiles (user_id, display_name, theme, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET display_name = excluded.display_name, theme = excluded.theme, updated_at = excluded.updated_at`)
     .bind(user.id, name, theme, Date.now()).run();
   return json({ ok: true, name, theme });
+}
+
+// ---------------- BLACK plan + billing (Stripe through ATLAS) ----------------
+async function planInfo(request, env) {
+  let s;
+  try { s = await planSummary(env, bearer(request)); }
+  catch (e) { return json({ error: "PLAN_CHECK_FAILED", detail: "BLACK couldn't check your plan just now. Try again in a moment." }, 503); }
+  return s ? json(s) : json({ error: "SIGN_IN_REQUIRED" }, 401);
+}
+
+// Checkout and Manage billing are created by ATLAS with the user's own session.
+async function billing(request, env, what) {
+  const b = await body(request);
+  const r = await fetch(atlas(env) + "/api/black/" + what, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: request.headers.get("authorization") || "" },
+    body: JSON.stringify(what === "subscribe" ? { plan: String(b.plan || "") } : {})
+  }).catch(() => null);
+  if (!r) return json({ error: "BILLING_UNREACHABLE", detail: "BLACK couldn't reach billing just now. Try again in a moment." }, 503);
+  const j = await r.json().catch(() => ({}));
+  return json(j, r.status);
 }
 
 // ---------------- storage (D1) ----------------
