@@ -8,7 +8,9 @@ Static front end for BLACK™, the dark-and-gold executive edition of GetService
 | `app.html` | BLACK Console: briefs, Fast / Smart / Deep / Executive modes, routing trail |
 | `config.js` | Runtime config (`apiBase`, `applicationId`, `studioUrl`) |
 | `assets/black.css` | Shared dark + gold design tokens and components |
-| `assets/unlock.js` | Unlock flow (preview access; billing comes later) |
+| `assets/unlock.js` | Unlock = sign in: Continue with Google or email/password (GetServices / ATLAS account) |
+| `assets/credits.js` | Credits chip, credits and plans window, out-of-credits lock, sign-out back to sign-in |
+| `functions/v1/_account.js` | Shared sign-in check (ATLAS), credits (D1 `black_credits`), testers, plan upgrade requests |
 | `assets/app.js` | Console logic; calls `POST /v1/responses` (streamed) and shows the Live Engines panel |
 | `assets/workspace.js` / `workspace.css` | Command Workspace on the console home: live slides for net worth, stocks, crypto, strategic portfolio, allocation, assets, meetings and statements, activity (demo data) |
 | `assets/attach.js` | Excel/CSV upload: read in the browser with SheetJS (cdnjs, loaded on first use); a compact data summary is added to the brief. Nothing is stored server side |
@@ -16,10 +18,15 @@ Static front end for BLACK™, the dark-and-gold executive edition of GetService
 | `functions/v1/me/[[path]].js` | Account + BLACK Calendar API (D1): login proxy to ATLAS, events, scheduling proposals, iCal import, subscribe feed |
 | `functions/v1/responses.js` | Live gateway (Claude, GPT, Gemini, Perplexity, Grok) |
 
-## How the unlock works today
-- **Unlock BLACK** opens the modal; **Enter BLACK** grants preview access in that browser and opens the console.
-- `https://black.getservices.ai/?unlock=1` opens the modal directly. The AI Studio "Black Edition" button links here.
-- Payment is not wired yet. The access check is client-side only and is not a paywall.
+## Access, credits and testers
+- **Sign-in required.** Unlock BLACK opens a sign-in window: **Continue with Google** (via ATLAS) or GetServices email and password. `app.html` sends anyone who isn't signed in back to `/?unlock=1`.
+- The gateway checks the account on every brief (`Authorization: Bearer <ATLAS session token>`), so access can't be bypassed in the browser. The old `BLACK_ACCESS_CODE` is no longer used and can be deleted from Cloudflare.
+- **50 free credits** for every new account (set `FREE_CREDITS` to change). Costs: Fast/Smart 1, Deep 2, Executive 3. Credits are charged only when a brief succeeds.
+- **Out of credits:** the brief box locks and the plans open (Starter $99/month, Pro $299/month, both with a 7-day trial; Enterprise by request).
+- **Choose plan** (until billing is connected) saves the request in D1 table `black_upgrade_requests` and opens an email to agents@getservices.ai. To activate someone by hand, add credits in D1: `UPDATE black_credits SET balance = balance + 500 WHERE email = 'name@example.com';`
+- **Testers (unlimited credits, never charged):** shaheenarifch@gmail.com and talhachoudary537@gmail.com. To change the list, set `BLACK_TESTERS` in Cloudflare to comma-separated emails (it replaces the default list).
+- Needs the `BLACK_DB` D1 binding (the same one as the BLACK Calendar). Tables are created on first use.
+- `https://black.getservices.ai/?unlock=1` opens the sign-in window directly. The AI Studio "Black Edition" button links here.
 
 ## Live answers
 `functions/v1/responses.js` is a Cloudflare Pages Function on this same project, so the console calls it at `/v1/responses` on the same domain.
@@ -32,10 +39,11 @@ Static front end for BLACK™, the dark-and-gold executive edition of GetService
 - **Fast** and **Smart** give quick answers (under ~120 words) with key data, one inline chart when numbers matter, and up to 3 source links. **Full report →** re-runs the brief in Deep mode. Deep and Executive stay detailed.
 - Synthesis uses the Smart model tier for speed. Set `SYNTH_TIER=deep` to use the Deep tier.
 - Add these secrets in Cloudflare (Pages > black-edition > Settings > Variables and secrets). Any engine without a key is skipped.
-  - `BLACK_ACCESS_CODE` (required)
+  - `BLACK_DB` D1 binding (required for credits; see "Access, credits and testers")
+  - Optional: `BLACK_TESTERS`, `FREE_CREDITS`
   - `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `PERPLEXITY_API_KEY`, `XAI_API_KEY`
   - Optional model overrides: `ANTHROPIC_MODEL`, `OPENAI_MODEL_DEEP` and so on (see the top of the function file).
-- Users enter the access code by tapping the status badge in the console. Without it they stay in Preview mode.
+- Users must be signed in. The status badge and the credits chip open the credits window.
 - NotebookLM isn't included because it has no public API for answering questions. Briefs with an attached spreadsheet or bank statement use the Docs Analyst route instead (Gemini first, then Claude and GPT).
 
 ## Deploy (Cloudflare Pages)

@@ -6,9 +6,9 @@
   var API = (CFG.apiBase || "").replace(/\/+$/, "");
   var LIVE = false;
   var STORE = "black.briefs";
-  var CODE_KEY = "black.code";
-  function getCode() { try { return localStorage.getItem(CODE_KEY) || ""; } catch (e) { return ""; } }
-  function setCode(v) { try { v ? localStorage.setItem(CODE_KEY, v) : localStorage.removeItem(CODE_KEY); } catch (e) {} }
+  // Live answers use the signed-in GetServices account (Bearer token) and its BLACK credits.
+  var CR = function () { return window.BLACK_CREDITS || null; };
+  function getToken() { try { return localStorage.getItem("black.session") || ""; } catch (e) { return ""; } }
 
   // Same deterministic rules as the RAMBO TaskClassifier (classifier.ts), so the hint matches the router.
   var RULES = [
@@ -57,21 +57,17 @@
   function setStatus() {
     el.status.classList.toggle("live", LIVE);
     if (LIVE) { el.statusText.textContent = "Live · " + ENGINES.join(" · "); el.status.title = "Connected to the BLACK gateway"; }
-    else if (ENGINES.length) { el.statusText.textContent = "Preview · enter access code"; el.status.title = "Enter your access code for live answers"; }
+    else if (ENGINES.length) { el.statusText.textContent = "Preview · sign in"; el.status.title = "Sign in with your GetServices account for live answers"; }
     else { el.statusText.textContent = "Preview mode"; el.status.title = "The live gateway isn't configured yet"; }
   }
   function probe() {
     fetch(API + "/v1/responses", { headers: { accept: "application/json" } })
       .then(function (r) { return r.ok ? r.json() : { live: false, engines: [] }; })
-      .then(function (j) { ENGINES = j.engines || []; LIVE = !!j.live && !!getCode(); setStatus(); })
+      .then(function (j) { ENGINES = j.engines || []; LIVE = !!j.live && !!getToken(); setStatus(); })
       .catch(function () { ENGINES = []; LIVE = false; setStatus(); });
   }
-  el.status.addEventListener("click", function () {
-    if (!ENGINES.length) return;
-    var v = window.prompt(LIVE ? "Change your BLACK access code (leave empty to switch to Preview):" : "Enter your BLACK access code for live answers:", getCode());
-    if (v === null) return;
-    setCode(v.trim()); probe();
-  });
+  // The status badge now opens your credits (balance, costs and plans).
+  el.status.addEventListener("click", function () { if (CR()) CR().open(); });
   setStatus(); probe();
 
   document.querySelectorAll(".modes button").forEach(function (b) {
@@ -162,6 +158,11 @@
   function submit() {
     var att = window.BLACK_ATTACH && window.BLACK_ATTACH.current();
     var text = el.prompt.value.trim(); if ((!text && !att) || busy) return;
+    // Not enough credits for this mode: show the plans instead of sending.
+    if (LIVE && CR() && !CR().canSend(mode)) {
+      CR().open(CR().isOut() ? "You've used all your credits. Choose a plan below to keep going." : "This mode needs more credits than you have left. Switch to Fast or Smart (1 credit), or choose a plan.");
+      return;
+    }
     if (!text) text = att && att.kind === "statement" ? "Summarize this bank statement: money in and out, biggest spending, fees, unusual charges and anything I should act on."
       : att && att.kind === "calendar" ? "Summarize my calendar: upcoming meetings, busy days, conflicts and anything I need to prepare for."
       : "Analyze this spreadsheet: the key totals, trends and anything that needs my attention.";
@@ -230,6 +231,7 @@
       stick = false;
       current.messages.push({ role: "assistant", content: res.content, meta: res.meta });
       save();
+      if (res.credits && CR()) CR().set(res.credits);
     }).catch(function (err) {
       pending.remove();
       addError(err && err.message ? err.message : "Something went wrong.", function () { dispatch(taskType); });
@@ -248,7 +250,7 @@
     return fetch(API + "/v1/responses", {
       method: "POST",
       credentials: "include",
-      headers: { "content-type": "application/json", accept: "text/event-stream", "x-black-access": getCode() },
+      headers: { "content-type": "application/json", accept: "text/event-stream", authorization: "Bearer " + getToken() },
       body: JSON.stringify(body)
     }).then(function (r) {
       var ct = r.headers.get("content-type") || "";
@@ -296,6 +298,7 @@
   function toResult(j, taskType, timeline) {
     var c = j.output && j.output.content;
     return {
+      credits: j.credits || null,
       content: typeof c === "string" ? c : JSON.stringify(c, null, 2),
       meta: {
         mode: j.mode || mode, taskType: taskType,
@@ -318,7 +321,9 @@
     });
   }
   function errorText(status, j) {
-    if (status === 401 || status === 403) { LIVE = false; setStatus(); return "Your access code wasn't accepted. Tap the status badge at the top to enter it again."; }
+    if (status === 401) { if (CR()) CR().signOut(); return "Your sign-in has expired. Please sign in again."; }
+    if (status === 402) { if (CR()) { CR().set({ balance: j && j.balance != null ? j.balance : 0 }); CR().open(); } return "You're out of BLACK credits for this mode. Choose a plan to keep going (Fast and Smart use 1 credit)."; }
+    if (status === 403) return "Your account doesn't have access to BLACK.";
     if (status === 413) return "That brief is too long. Shorten it or start a new brief.";
     if (status === 502) return "Every engine failed to answer this time. Try again in a moment.";
     if (status === 424) return "Every engine failed to answer. " + ((j && j.engines) || []).map(function (f) { return f.engine + ": " + f.error; }).join(" · ");
@@ -341,7 +346,7 @@
       "- **Engine:** " + engine
     ];
     if (mode === "executive") lines.push("- **Executive Mode:** sent to at least two independent models in parallel, with disagreements flagged and one synthesis returned");
-    lines.push("", ENGINES.length ? "Tap the status badge at the top and enter your access code to get live answers." : "The live gateway isn't configured yet.");
+    lines.push("", ENGINES.length ? "Sign in with your GetServices account to get live answers." : "The live gateway isn't configured yet.");
     return new Promise(function (resolve) {
       setTimeout(function () {
         resolve({ content: lines.join("\n"), meta: { preview: true, mode: mode, taskType: taskType, reasons: ["PREVIEW_NO_MODEL_CALLED"] } });

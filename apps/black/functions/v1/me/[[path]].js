@@ -5,6 +5,8 @@
  *   POST /v1/me/login            {email, password} -> ATLAS /auth/login -> {token, user}
  *   GET  /v1/me/providers        which social sign-ins ATLAS offers, with their start URLs
  *   GET  /v1/me                  who is signed in + calendar settings   (Authorization: Bearer <token>)
+ *   GET  /v1/me/credits          BLACK credits: 50 free for new accounts, unlimited for testers (see ../_account.js)
+ *   POST /v1/me/upgrade          {plan, note}  saves a plan upgrade request while billing isn't connected
  * Calendar (BLACK's own, stored in Cloudflare D1):
  *   GET    /v1/me/events?from=&to=   BLACK events + events from the user's linked iCal calendar
  *   POST   /v1/me/propose            {text, tz}  brief -> proposed create / reschedule / cancel, with conflicts
@@ -21,12 +23,11 @@
  *   ANTHROPIC_API_KEY  already set for the gateway; used to understand scheduling briefs
  */
 
-const ATLAS_DEFAULT = "https://atlas-api-v2.python-tester.workers.dev";
+import { atlas, userFrom, credits, upgradeRequest } from "../_account.js";
+
 const SITE = "https://black.getservices.ai";
-const ME_CACHE_MS = 5 * 60 * 1000;
 const ICAL_CACHE_MS = 5 * 60 * 1000;
 const DAY = 86400000;
-const meCache = new Map();   // token -> { user, at }
 const icalCache = new Map(); // url -> { events, at }
 
 export async function onRequest(ctx) {
@@ -52,6 +53,8 @@ async function route({ request, env }, parts, method) {
     const user = await userFrom(request, env);
     if (!user) return json({ error: "SIGN_IN_REQUIRED" }, 401);
     if (!parts.length && method === "GET") return meInfo(env, user, request);
+    if (parts[0] === "credits" && method === "GET") return json(await credits(env, user));
+    if (parts[0] === "upgrade" && method === "POST") { const b = await body(request); return json(await upgradeRequest(env, user, b.plan, b.note)); }
     if (!env.BLACK_DB) return json({ error: "CALENDAR_NOT_CONFIGURED" }, 503);
     await ensureSchema(env);
 
@@ -69,7 +72,6 @@ async function route({ request, env }, parts, method) {
 }
 
 // ---------------- identity (ATLAS) ----------------
-const atlas = (env) => String(env.ATLAS_API_URL || ATLAS_DEFAULT).replace(/\/+$/, "");
 
 async function login(request, env) {
   const b = await body(request);
@@ -97,21 +99,6 @@ async function providers(env) {
       url: atlas(env) + "/auth/oauth/" + encodeURIComponent(p.id) + "?redirect=" + encodeURIComponent(SITE + "/app.html")
     }));
   return json({ providers: list, signupUrl: "https://app.getservices.ai/#/signup" });
-}
-
-async function userFrom(request, env) {
-  const m = (request.headers.get("authorization") || "").match(/^Bearer\s+([A-Za-z0-9_\-]{20,})$/);
-  if (!m) return null;
-  const token = m[1], hit = meCache.get(token);
-  if (hit && Date.now() - hit.at < ME_CACHE_MS) return hit.user;
-  const r = await fetch(atlas(env) + "/auth/me", { headers: { authorization: "Bearer " + token } }).catch(() => null);
-  if (!r || !r.ok) { meCache.delete(token); return null; }
-  const j = await r.json().catch(() => ({}));
-  if (!j.authenticated || !j.user || !j.user.id) return null;
-  const user = { id: String(j.user.id), email: j.user.email || "" };
-  meCache.set(token, { user, at: Date.now() });
-  if (meCache.size > 500) meCache.delete(meCache.keys().next().value);
-  return user;
 }
 
 async function meInfo(env, user, request) {

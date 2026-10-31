@@ -7,7 +7,10 @@
  *   route, engine, delta, switch, synth, ping, done, error
  *
  * Secrets (Cloudflare Pages > black-edition > Settings > Variables and secrets):
- *   BLACK_ACCESS_CODE   required: briefs must send header x-black-access with this value
+ *   (Access) Briefs need a signed-in GetServices account: "Authorization: Bearer <ATLAS session token>".
+ *            Each brief uses credits (Fast/Smart 1, Deep 2, Executive 3), charged only when it succeeds.
+ *            New accounts start with 50 free credits; testers are unlimited. See ./_account.js.
+ *   BLACK_DB            D1 binding that holds credits (the same database as the BLACK Calendar)
  *   ANTHROPIC_API_KEY   Claude
  *   OPENAI_API_KEY      GPT
  *   GEMINI_API_KEY      Gemini
@@ -18,6 +21,8 @@
  *   XAI_MODEL, XAI_MODEL_DEEP, XAI_MODEL_FAST.
  * Engines without a key are skipped; routing falls back to the next configured engine.
  */
+
+import { userFrom, credits, charge, COSTS } from "./_account.js";
 
 const DEFAULT_MODELS = {
   // Smart runs on Haiku with thinking off so the first words arrive in about a second. Synthesis keeps Sonnet.
@@ -105,12 +110,13 @@ const PARTIAL_MIN_CHARS = 400;     // a timed-out engine that already wrote this
 const SYNTH_CANDIDATE_CHARS = 7000; // trim each candidate before synthesis so the judge answers faster
 
 export async function onRequestGet({ env }) {
-  return json({ live: engines(env).length > 0 && !!env.BLACK_ACCESS_CODE, engines: engines(env).map((e) => LABEL[e]) });
+  return json({ live: engines(env).length > 0, engines: engines(env).map((e) => LABEL[e]) });
 }
 
 export async function onRequestPost({ request, env, waitUntil }) {
-  if (!env.BLACK_ACCESS_CODE) return json({ error: "GATEWAY_NOT_CONFIGURED" }, 503);
-  if (!safeEqual(request.headers.get("x-black-access") || "", env.BLACK_ACCESS_CODE)) return json({ error: "ACCESS_DENIED" }, 401);
+  // Signed-in accounts only (Google or email, the same GetServices account as ATLAS).
+  const user = await userFrom(request, env);
+  if (!user) return json({ error: "SIGN_IN_REQUIRED", detail: "Sign in with your GetServices account to use BLACK." }, 401);
   const available = engines(env);
   if (!available.length) return json({ error: "NO_ENGINES_CONFIGURED" }, 503);
 
@@ -123,6 +129,18 @@ export async function onRequestPost({ request, env, waitUntil }) {
   if (messages.reduce((n, m) => n + m.content.length, 0) > MAX_CHARS) return json({ error: "BRIEF_TOO_LONG" }, 413);
 
   const mode = ["fast", "smart", "deep", "executive"].includes(body.mode) ? body.mode : "smart";
+  // Enough credits for this mode? (Charged later, only if the brief succeeds.)
+  let wallet;
+  try { wallet = await credits(env, user); }
+  catch (e) { return json({ error: e.code || "CREDITS_UNAVAILABLE", detail: e.message }, e.status || 503); }
+  if (!wallet.unlimited && wallet.balance < COSTS[mode]) {
+    return json({ error: "OUT_OF_CREDITS", detail: "You've used your BLACK credits. Choose a plan to keep going.", balance: wallet.balance, cost: COSTS[mode] }, 402);
+  }
+  // Charges a successful brief and adds the new balance to the answer.
+  const finish = async (out) => {
+    try { out.credits = await charge(env, user, mode); } catch { out.credits = null; }
+    return out;
+  };
   const lastUser = messages[messages.length - 1].content;
   // The gateway's own rules win for briefs that need the live web, so a browser with an older
   // classifier (cached app.js) can't send a website or weather brief to a model without web access.
@@ -148,12 +166,12 @@ export async function onRequestPost({ request, env, waitUntil }) {
   const requestId = crypto.randomUUID();
   const started = Date.now();
 
-  if (body.stream === true) return live({ env, waitUntil, mode, tier, order, messages, taskType, requestId, started, asked });
+  if (body.stream === true) return live({ env, waitUntil, mode, tier, order, messages, taskType, requestId, started, asked, finish });
 
   try {
     if (mode === "executive" && order.length >= 2) {
       const ex = await executive({ env, order, messages, taskType, requestId, started });
-      return ex.failures ? allFailed(ex.failures) : json(ex);
+      return ex.failures ? allFailed(ex.failures) : json(await finish(ex));
     }
     // Single answer with ordered fallback.
     const reasons = [REASON[taskType], "MODE_" + mode.toUpperCase()];
@@ -164,7 +182,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
       try {
         const r = await call(order[i], env, tier, messages, systemFor(mode), taskType === "web_lookup");
         if (i > 0) reasons.push("FALLBACK_FROM_" + order[0].toUpperCase());
-        return json(shape({ requestId, mode, started, provider: order[i], model: r.model, text: r.text, reasons, fallbackUsed: i > 0, usage: r.usage }));
+        return json(await finish(shape({ requestId, mode, started, provider: order[i], model: r.model, text: r.text, reasons, fallbackUsed: i > 0, usage: r.usage })));
       } catch (e) { failures.push(failure(order[i], e)); }
     }
     return allFailed(failures);
@@ -316,13 +334,15 @@ async function post(url, headers, payload) {
 //   ping   {t}                           (keep-alive every 8s)
 //   done   <same body as the JSON response>
 //   error  {error, engines?}
-function live({ env, waitUntil, mode, tier, order, messages, taskType, requestId, started, asked }) {
+function live({ env, waitUntil, mode, tier, order, messages, taskType, requestId, started, asked, finish }) {
   const { readable, writable } = new TransformStream();
   const w = writable.getWriter();
   const enc = new TextEncoder();
   let closed = false;
-  const send = (event, data) => {
-    if (closed) return Promise.resolve();
+  const send = async (event, data) => {
+    if (closed) return;
+    // A finished brief is charged before "done" goes out, so the console shows the new balance.
+    if (event === "done" && finish) data = await finish(data);
     return w.write(enc.encode("event: " + event + "\ndata: " + JSON.stringify(data) + "\n\n")).catch(() => { closed = true; });
   };
   const ping = setInterval(() => send("ping", { t: Date.now() - started }), 8000);
@@ -688,12 +708,6 @@ function shape({ requestId, mode, started, provider, model, text, reasons, fallb
   };
   if (executive) out.executive = executive;
   return out;
-}
-function safeEqual(a, b) {
-  if (a.length !== b.length) return false;
-  let d = 0;
-  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return d === 0;
 }
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });

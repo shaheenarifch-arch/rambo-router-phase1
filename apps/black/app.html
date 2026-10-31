@@ -24,8 +24,11 @@
   } catch (e) {}
 </script>
 <script>
-  // Preview gate: send visitors without access back to the unlock screen.
-  try { if (localStorage.getItem("black.access") !== "preview") location.replace("index.html?unlock=1"); } catch (e) {}
+  // Sign-in gate: BLACK needs a GetServices account. Visitors who aren't signed in go back to the
+  // unlock screen. "#atlas_session=" is the token coming back from Google sign-in (saved by calendar.js).
+  try {
+    if (!localStorage.getItem("black.session") && !/atlas_session=/.test(location.hash)) location.replace("index.html?unlock=1");
+  } catch (e) { location.replace("index.html?unlock=1"); }
 </script>
 <style>
 body{height:100vh;height:100dvh;overflow:hidden}
@@ -60,6 +63,18 @@ body{height:100vh;height:100dvh;overflow:hidden}
 .status{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:6px 12px;white-space:nowrap}
 .status .led{width:7px;height:7px;border-radius:50%;background:var(--warn)}
 .status.live .led{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+.credits{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--gold);border:1px solid var(--line-gold);border-radius:999px;padding:6px 12px;white-space:nowrap}
+.credits:hover{background:rgba(227,196,107,.08)}
+.credits.low{color:var(--warn);border-color:var(--warn)}
+.credits.out{color:#0a0a0a;background:var(--gold-grad);border-color:transparent;font-weight:600}
+.cr-head{display:flex;align-items:baseline;gap:10px;margin:6px 0 4px}
+.cr-head b{font-size:36px;color:var(--gold)}
+.cr-costs{font-size:14px;color:var(--muted);margin:10px 0 0}
+.cr-plans{display:grid;gap:10px;margin:18px 0 6px}
+.cr-plan{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.cr-plan strong{display:block;color:#fff}.cr-plan span{font-size:13px;color:var(--dim)}
+.modal .cr-plan .btn{width:auto;flex:0 0 auto}
+.cr-msg{font-size:14px;color:var(--ok);min-height:1em;margin:8px 0 0}
 .badge-exec{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#0a0a0a;background:var(--gold-grad);padding:6px 12px;border-radius:999px;font-weight:700;white-space:nowrap}
 .scroll{flex:1;overflow:auto;min-height:0}
 .wrap{max-width:860px;margin:0 auto;padding:40px 22px 24px}
@@ -250,6 +265,7 @@ body{height:100vh;height:100dvh;overflow:hidden}
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
         </button>
         <button type="button" class="status" id="status"><span class="led"></span><span id="status-text">Preview mode</span></button>
+        <button type="button" class="credits" id="credits-btn" title="Your BLACK credits. Tap for details and plans." hidden>…</button>
       </div>
       <div class="right">
         <button type="button" class="account" id="account-btn" title="Sign in with your GetServices account"><span class="lbl">Sign in</span></button>
@@ -307,6 +323,24 @@ body{height:100vh;height:100dvh;overflow:hidden}
   </div>
 </div>
 
+<div class="modal-backdrop" id="credits-modal" role="dialog" aria-modal="true" aria-labelledby="cr-title" aria-hidden="true">
+  <div class="modal">
+    <button class="close" data-close aria-label="Close">✕</button>
+    <span class="eyebrow"><span class="dot"></span>Your account</span>
+    <h2 id="cr-title"><span class="gold-text">BLACK</span> credits</h2>
+    <div class="cr-head"><b id="cr-balance">–</b><span id="cr-label">credits left</span></div>
+    <p id="cr-note">Every new account starts with 50 free credits.</p>
+    <p class="cr-costs">A credit is used only when a brief is answered: <b>Fast</b> or <b>Smart</b> 1 · <b>Deep</b> 2 · <b>Executive</b> 3. Failed briefs are free.</p>
+    <div class="cr-plans" id="cr-plans">
+      <div class="cr-plan"><div><strong>Starter · $99/month</strong><span>7-day free trial · monthly brief allowance</span></div><button class="btn btn-gold btn-sm" data-plan="starter">Choose</button></div>
+      <div class="cr-plan"><div><strong>Pro · $299/month</strong><span>7-day free trial · larger monthly allowance</span></div><button class="btn btn-gold btn-sm" data-plan="pro">Choose</button></div>
+      <div class="cr-plan"><div><strong>Enterprise</strong><span>Custom engines, seats and limits</span></div><button class="btn btn-ghost btn-sm" data-plan="enterprise">Contact us</button></div>
+    </div>
+    <p class="cr-msg" id="cr-msg" aria-live="polite"></p>
+    <p class="fine">Online billing is being connected. Choosing a plan sends your request to the GetServices team, who activate it for you. <a href="pricing/">Pricing and help</a></p>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="signin-modal" role="dialog" aria-modal="true" aria-labelledby="si-title" aria-hidden="true">
   <div class="modal">
     <button class="close" data-close aria-label="Close">✕</button>
@@ -338,6 +372,7 @@ body{height:100vh;height:100dvh;overflow:hidden}
 <script src="assets/attach.js?v=3"></script>
 <script src="assets/calendar.js?v=5"></script>
 <script src="assets/theme.js?v=1"></script>
-<script src="assets/app.js?v=21"></script>
+<script src="assets/credits.js?v=1"></script>
+<script src="assets/app.js?v=22"></script>
 </body>
 </html>
