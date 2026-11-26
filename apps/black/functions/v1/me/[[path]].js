@@ -14,6 +14,10 @@
  *   PATCH  /v1/me/events/:id         reschedule / edit
  *   DELETE /v1/me/events/:id         cancel
  *   PUT    /v1/me/settings           {icalUrl, tz, videoLink}
+ * Shortcuts (saved prompt snippets, inserted with "/" in the brief box; follow the account to any device):
+ *   GET    /v1/me/shortcuts          the user's shortcuts
+ *   POST   /v1/me/shortcuts          {name, text}  add one (max 40)
+ *   DELETE /v1/me/shortcuts/:id      remove one
  *   GET    /v1/me/feed/:secret.ics   subscribe feed for Google / Outlook / Apple (no sign-in; secret URL)
  *
  * Bindings and secrets (Cloudflare Pages > black-edition > Settings):
@@ -60,6 +64,11 @@ async function route({ request, env }, parts, method) {
 
     if (parts[0] === "settings" && method === "PUT") return saveSettings(request, env, user);
     if (parts[0] === "profile" && method === "PUT") return saveProfile(request, env, user);
+    if (parts[0] === "shortcuts") {
+      if (!parts[1] && method === "GET") return listShortcuts(env, user);
+      if (!parts[1] && method === "POST") return addShortcut(request, env, user);
+      if (parts[1] && method === "DELETE") return deleteShortcut(env, user, parts[1]);
+    }
     if (parts[0] === "propose" && method === "POST") return propose(request, env, user);
     if (parts[0] === "events") {
       if (!parts[1] && method === "GET") return listEvents(request, env, user);
@@ -138,11 +147,35 @@ async function ensureSchema(env) {
     env.BLACK_DB.prepare(`CREATE TABLE IF NOT EXISTS cal_events (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT NOT NULL, start_ms INTEGER NOT NULL, end_ms INTEGER NOT NULL, tz TEXT, attendees TEXT, location TEXT, notes TEXT, status TEXT NOT NULL DEFAULT 'confirmed', seq INTEGER NOT NULL DEFAULT 0, created_at INTEGER, updated_at INTEGER)`),
     env.BLACK_DB.prepare(`CREATE INDEX IF NOT EXISTS cal_events_user_start ON cal_events (user_id, start_ms)`),
     env.BLACK_DB.prepare(`CREATE TABLE IF NOT EXISTS black_profiles (user_id TEXT PRIMARY KEY, display_name TEXT, theme TEXT, updated_at INTEGER)`),
+    env.BLACK_DB.prepare(`CREATE TABLE IF NOT EXISTS black_shortcuts (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL, created_at INTEGER)`),
+    env.BLACK_DB.prepare(`CREATE INDEX IF NOT EXISTS black_shortcuts_user ON black_shortcuts (user_id, created_at)`),
     env.BLACK_DB.prepare(`CREATE TABLE IF NOT EXISTS cal_contacts (user_id TEXT NOT NULL, name TEXT NOT NULL, email TEXT NOT NULL, updated_at INTEGER, PRIMARY KEY (user_id, name))`)
   ]);
   // Added after black_profiles first shipped; harmless when the column already exists.
   await env.BLACK_DB.prepare(`ALTER TABLE black_profiles ADD COLUMN theme TEXT`).run().catch(() => {});
   schemaReady = true;
+}
+
+// ---------------- shortcuts ----------------
+const MAX_SHORTCUTS = 40;
+async function listShortcuts(env, user) {
+  const r = await env.BLACK_DB.prepare(`SELECT id, name, text FROM black_shortcuts WHERE user_id = ? ORDER BY created_at`).bind(user.id).all();
+  return json({ shortcuts: r.results || [] });
+}
+async function addShortcut(request, env, user) {
+  const b = await body(request);
+  const name = String(b.name || "").replace(/\s+/g, " ").trim().slice(0, 40);
+  const text = String(b.text || "").trim().slice(0, 1000);
+  if (!name || !text) throw bad("Give the shortcut a name and the text it should add.");
+  const n = await env.BLACK_DB.prepare(`SELECT COUNT(*) AS n FROM black_shortcuts WHERE user_id = ?`).bind(user.id).first();
+  if (n && n.n >= MAX_SHORTCUTS) throw bad("You can keep up to " + MAX_SHORTCUTS + " shortcuts. Delete one to add another.");
+  const id = crypto.randomUUID();
+  await env.BLACK_DB.prepare(`INSERT INTO black_shortcuts (id, user_id, name, text, created_at) VALUES (?, ?, ?, ?, ?)`).bind(id, user.id, name, text, Date.now()).run();
+  return json({ shortcut: { id, name, text } }, 201);
+}
+async function deleteShortcut(env, user, id) {
+  await env.BLACK_DB.prepare(`DELETE FROM black_shortcuts WHERE id = ? AND user_id = ?`).bind(String(id), user.id).run();
+  return json({ ok: true });
 }
 
 async function settings(env, user) {

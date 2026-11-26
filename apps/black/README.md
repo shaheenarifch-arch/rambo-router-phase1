@@ -13,7 +13,8 @@ Static front end for BLACK™, the dark-and-gold executive edition of GetService
 | `functions/v1/_account.js` | Shared sign-in check (ATLAS), credits (D1 `black_credits`), testers, plan upgrade requests |
 | `assets/app.js` | Console logic; calls `POST /v1/responses` (streamed) and shows the Live Engines panel |
 | `assets/workspace.js` / `workspace.css` | Command Workspace on the console home: live slides for net worth, stocks, crypto, strategic portfolio, allocation, assets, meetings and statements, activity (demo data) |
-| `assets/attach.js` | Excel/CSV upload: read in the browser with SheetJS (cdnjs, loaded on first use); a compact data summary is added to the brief. Nothing is stored server side |
+| `assets/compose.js` | Composer tools: **Web** switch (Auto / On / Off), **Choose engines** for Executive mode, and **Shortcuts** (type `/` in the brief box) |
+| `assets/attach.js` | Images (JPG, PNG, WebP, GIF), documents (PDF, Word .docx, .txt, .md) and Excel/CSV upload: read in the browser with SheetJS (cdnjs, loaded on first use); a compact data summary is added to the brief. Nothing is stored server side |
 | `assets/calendar.js` / `calendar.css` | Sign-in with the GetServices account, scheduling confirmation cards, calendar drawer, calendar context for briefs |
 | `functions/v1/me/[[path]].js` | Account + BLACK Calendar API (D1): login proxy to ATLAS, events, scheduling proposals, iCal import, subscribe feed |
 | `functions/v1/responses.js` | Live gateway (Claude, GPT, Gemini, Perplexity, Grok) |
@@ -45,6 +46,14 @@ Static front end for BLACK™, the dark-and-gold executive edition of GetService
   - Optional model overrides: `ANTHROPIC_MODEL`, `OPENAI_MODEL_DEEP` and so on (see the top of the function file).
 - Users must be signed in. The status badge and the credits chip open the credits window.
 - NotebookLM isn't included because it has no public API for answering questions. Briefs with an attached spreadsheet or bank statement use the Docs Analyst route instead (Gemini first, then Claude and GPT).
+
+## Compare, engines, web switch, shortcuts and files (Nov 2026)
+- **Compare:** Executive answers show each engine's own answer in side-by-side columns (swipe on a phone) under the BLACK synthesis, each with **Copy**.
+- **Choose engines:** in Executive mode, the **Engines** button lets a user pick 2 or 3 engines (sent as `engines: ["openai","gemini"]`). Auto stays the default. Claude still writes the synthesis when it is live.
+- **Web switch:** `web: "auto" | "on" | "off"`. On sends every brief to the live-web route (Claude also gets web search); Off leaves Perplexity out and skips site fetches.
+- **Shortcuts:** 5 built-in snippets plus each user's own (up to 40), saved in D1 table `black_shortcuts` via `GET/POST /v1/me/shortcuts` and `DELETE /v1/me/shortcuts/:id`, so they follow the account to any device.
+- **Images and documents:** images are shrunk in the browser and sent once as `images: [{mediaType, data}]` to Claude, GPT or Gemini only (Grok and Perplexity are skipped); documents are read in the browser and only their text is sent (up to ~16,000 characters). Nothing is stored. Word files use Mammoth from jsDelivr, loaded on first use.
+- No new secrets or settings are needed.
 
 ## Deploy (Cloudflare Pages)
 - Connect this repo, set **root directory** to `apps/black`, no build command, output directory `/`.

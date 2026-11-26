@@ -1,4 +1,6 @@
-/* BLACK attachments: Excel / CSV / calendar (.ics) upload for briefs.
+/* BLACK attachments: Excel / CSV / calendar (.ics) / bank statements / images / documents (PDF, Word, text) for briefs.
+ * Images are shrunk in the browser (longest side 1600px, JPEG) and sent with that one brief only; they are not stored.
+ * Documents are read in the browser (PDF.js / Mammoth, loaded on first use); only their text goes with the brief.
  * Calendar files are parsed in the browser into a list of events (no library needed).
  * The file is read in the browser with SheetJS (loaded from cdnjs only when a file is picked).
  * Nothing is uploaded or stored server side: BLACK receives a compact text summary of the data
@@ -9,7 +11,9 @@
   "use strict";
   var LIB = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
   var MAX_BYTES = 5 * 1024 * 1024, MAX_SHEETS = 3, MAX_ROWS = 40, MAX_COLS = 20, MAX_CHARS = 11000;
-  var OK = /\.(xlsx|xlsm|xls|csv|ics|ofx|qfx|qbo|pdf)$/i, ICS = /\.ics$/i, MAX_EVENTS = 80;
+  var OK = /\.(xlsx|xlsm|xls|csv|ics|ofx|qfx|qbo|pdf|jpe?g|png|webp|gif|docx|txt|md)$/i, ICS = /\.ics$/i, MAX_EVENTS = 80;
+  var IMG = /\.(jpe?g|png|webp|gif)$/i, DOC = /\.(docx|txt|md)$/i, MAX_DOC = 16000, IMG_SIDE = 1600;
+  var DOCX_LIB = "https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js";
   var HELP = 'How to export a calendar file: <a href="https://support.google.com/calendar/answer/37111?hl=en" target="_blank" rel="noopener">Google</a> \u00b7 ' +
     '<a href="https://support.microsoft.com/en-us/outlook/export-an-outlook-calendar-to-google-calendar" target="_blank" rel="noopener">Outlook</a> \u00b7 ' +
     '<a href="https://support.apple.com/guide/calendar/icl1023/mac" target="_blank" rel="noopener">Apple</a>';
@@ -48,7 +52,7 @@
 
   function pick(f) {
     if (!f) return;
-    if (!OK.test(f.name)) return fail("BLACK can read Excel (.xlsx, .xls), .csv, calendar (.ics) and bank statement (.ofx, .qfx, .pdf) files.", "all");
+    if (!OK.test(f.name)) return fail("BLACK can read images (.jpg, .png, .webp, .gif), documents (.pdf, .docx, .txt, .md), Excel (.xlsx, .xls), .csv, calendar (.ics) and bank statement (.ofx, .qfx) files.", "all");
     if (f.size > MAX_BYTES) return fail(f.name + " is " + mb(f.size) + ". The limit is 5 MB.");
     file = null; emit();
     tray.hidden = false;
@@ -62,15 +66,36 @@
       }).catch(function () { fail("Couldn't read " + f.name + ". Is it a valid calendar (.ics) file?", true); });
       return;
     }
+    if (IMG.test(f.name)) {
+      readImage(f).then(function (img) {
+        file = { name: f.name, size: f.size, sheetCount: 0, kind: "image", image: img, sheets: [] };
+        render(); emit();
+      }).catch(function () { fail("Couldn't open " + f.name + ". Is it a valid image?"); });
+      return;
+    }
+    if (DOC.test(f.name)) {
+      (/\.docx$/i.test(f.name) ? Promise.all([loadDocx(), f.arrayBuffer()]).then(function (r) { return r[0].extractRawText({ arrayBuffer: r[1] }).then(function (x) { return { text: x.value }; }); })
+        : f.text().then(function (t) { return { text: t }; })).then(function (d) {
+        if (!d.text || !d.text.trim()) return fail(f.name + " has no text BLACK can read.");
+        useDocument(f, d);
+      }).catch(function (e) { fail(e && e.message === "lib" ? "Couldn't load the Word reader. Check your connection and try again." : "Couldn't read " + f.name + ". Is it a valid document?"); });
+      return;
+    }
     var STMT = window.BLACK_STMT;
     if (STMT && STMT.isStatementFile(f.name)) {
       var pdf = /\.pdf$/i.test(f.name);
-      (pdf ? f.arrayBuffer().then(STMT.parsePdf) : f.text().then(STMT.parseOfx)).then(function (st) {
+      (pdf ? f.arrayBuffer().then(function (buf) {
+        // A PDF is read as a bank statement when it has transactions or balances; otherwise as a document.
+        return STMT.parsePdf(buf.slice(0)).then(function (st) {
+          return st.n || st.closing != null ? st : STMT.pdfText(buf).then(function (d) { return { doc: d }; });
+        });
+      }) : f.text().then(STMT.parseOfx)).then(function (st) {
+        if (st.doc) return useDocument(f, st.doc);
         if (!st.n && st.closing == null && !st.text) return fail(f.name + " has no transactions or balances BLACK can read.", "bank");
         useStatement(f, st);
       }).catch(function (e) {
-        fail(e && e.message === "scan" ? f.name + " looks like a scanned image, so there is no text to read. Download the statement as CSV, OFX/QFX or a text PDF instead."
-          : e && e.message === "lib" ? "Couldn't load the PDF reader. Check your connection and try again." : "Couldn't read " + f.name + ". Is it a valid bank statement file?", "bank");
+        fail(e && e.message === "scan" ? f.name + " looks like a scanned image, so there is no text to read. Save the pages as images (JPG or PNG) and attach one, or use a text PDF."
+          : e && e.message === "lib" ? "Couldn't load the PDF reader. Check your connection and try again." : "Couldn't read " + f.name + ". Is it a valid PDF or bank statement file?", pdf ? null : "bank");
       });
       return;
     }
@@ -86,6 +111,43 @@
     }).catch(function (e) {
       fail(e && e.message === "lib" ? "Couldn't load the spreadsheet reader. Check your connection and try again." : "Couldn't read " + f.name + ". Is it a valid Excel or CSV file?");
     });
+  }
+
+  function useDocument(f, d) {
+    var text = String(d.text).replace(/\r\n?/g, "\n").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+    var words = (text.match(/\S+/g) || []).length;
+    file = { name: f.name, size: f.size, sheetCount: 0, kind: "document", text: text, words: words, pages: d.pages || null, sheets: [] };
+    render(); emit();
+  }
+  // Shrinks a photo in the browser so briefs stay fast: longest side IMG_SIDE px, JPEG (PNG/GIF keep transparency as white).
+  function readImage(f) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(f), im = new Image();
+      im.onload = function () {
+        try {
+          var k = Math.min(1, IMG_SIDE / Math.max(im.naturalWidth, im.naturalHeight)), w = Math.max(1, Math.round(im.naturalWidth * k)), h = Math.max(1, Math.round(im.naturalHeight * k));
+          var c = document.createElement("canvas"); c.width = w; c.height = h;
+          var g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, w, h); g.drawImage(im, 0, 0, w, h);
+          var dataUrl = c.toDataURL("image/jpeg", 0.85);
+          URL.revokeObjectURL(url);
+          resolve({ mediaType: "image/jpeg", data: dataUrl.split(",")[1], preview: dataUrl, w: w, h: h });
+        } catch (e) { URL.revokeObjectURL(url); reject(e); }
+      };
+      im.onerror = function () { URL.revokeObjectURL(url); reject(new Error("img")); };
+      im.src = url;
+    });
+  }
+  var docxPromise = null;
+  function loadDocx() {
+    if (window.mammoth) return Promise.resolve(window.mammoth);
+    if (docxPromise) return docxPromise;
+    docxPromise = new Promise(function (resolve, reject) {
+      var s = document.createElement("script"); s.src = DOCX_LIB; s.async = true;
+      s.onload = function () { window.mammoth ? resolve(window.mammoth) : reject(new Error("lib")); };
+      s.onerror = function () { docxPromise = null; reject(new Error("lib")); };
+      document.head.appendChild(s);
+    });
+    return docxPromise;
   }
 
   function useStatement(f, st) {
@@ -161,6 +223,12 @@
   // Compact, model-friendly description of the file (markdown tables), capped at MAX_CHARS.
   function promptBlock() {
     if (!file) return "";
+    if (file.kind === "image") return "[Attached image: " + file.name + " · " + file.image.w + "×" + file.image.h + "px · the image itself is included with this brief]";
+    if (file.kind === "document") {
+      var cut = file.text.length > MAX_DOC;
+      return "[Attached document: " + file.name + " · " + file.words.toLocaleString() + " words" + (file.pages ? " · " + file.pages + " pages" : "") + (cut ? " · first part included" : "") + "]\n" +
+        (cut ? file.text.slice(0, MAX_DOC) + "\n(document truncated to fit)" : file.text);
+    }
     if (file.kind === "statement") return window.BLACK_STMT.promptBlock(file.stmt, file.name);
     if (file.kind === "calendar") {
       var s0 = file.sheets[0], o = ["[Attached calendar: " + file.name + " · " + file.total + " events" + (file.total > s0.rows ? " (" + s0.rows + " included, upcoming first)" : "") +
@@ -187,6 +255,19 @@
   }
 
   function render() {
+    if (file.kind === "image" || file.kind === "document") {
+      tray.hidden = false;
+      tray.innerHTML = '<div class="att">' + (file.kind === "image" ? '<img class="att-thumb" alt="">' : '<span class="att-ic" aria-hidden="true">\ud83d\udcc4</span>') +
+        '<span class="att-name"><b></b><small></small></span><button type="button" class="att-x" aria-label="Remove file">✕</button></div>' +
+        '<p class="att-help">' + (file.kind === "image" ? "\ud83d\udd12 Sent with this brief only and not stored. Read by Claude, GPT or Gemini (Grok and Perplexity don't read images)."
+          : "\ud83d\udd12 Read in your browser. Only the text goes with your brief; nothing is stored." + (file.text.length > MAX_DOC ? " Long document: the first ~" + Math.round(MAX_DOC / 6).toLocaleString() + " words are used." : "")) + "</p>";
+      if (file.kind === "image") tray.querySelector(".att-thumb").src = file.image.preview;
+      tray.querySelector(".att-name b").textContent = file.name;
+      tray.querySelector(".att-name small").textContent = file.kind === "image" ? "image · " + file.image.w + "×" + file.image.h + " · " + mb(file.image.data.length * 0.75)
+        : "document · " + file.words.toLocaleString() + " words" + (file.pages ? " · " + file.pages + (file.pages > 1 ? " pages" : " page") : "") + " · " + mb(file.size);
+      tray.querySelector(".att-x").addEventListener("click", clear);
+      return;
+    }
     var s = file.sheets[0], rows = s.data.slice(0, 5), cols = s.header.slice(0, file.kind === "calendar" ? 4 : 6);
     var total = file.sheets.reduce(function (n, x) { return n + x.rows; }, 0);
     tray.hidden = false;
@@ -219,7 +300,14 @@
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
 
   window.BLACK_ATTACH = {
-    current: function () { return file ? { name: file.name, kind: file.kind || "sheet", sheets: file.sheetCount, rows: file.sheets.reduce(function (n, x) { return n + x.rows; }, 0) } : null; },
+    current: function () {
+      if (!file) return null;
+      var c = { name: file.name, kind: file.kind || "sheet", sheets: file.sheetCount, rows: file.sheets.reduce(function (n, x) { return n + x.rows; }, 0) };
+      if (file.kind === "document") c.words = file.words;
+      return c;
+    },
+    // The image to send with the brief (not saved with the brief history).
+    image: function () { return file && file.kind === "image" ? { mediaType: file.image.mediaType, data: file.image.data } : null; },
     helpHtml: HELP,
     promptBlock: promptBlock,
     clear: clear,
