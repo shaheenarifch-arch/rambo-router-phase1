@@ -229,6 +229,60 @@ body{height:100vh;height:100dvh;overflow:hidden}
 .send:disabled{opacity:.4;cursor:not-allowed}
 .hint{text-align:center;font-size:12px;color:var(--dim);margin-top:10px}
 .scrim{display:none}
+/* Composer tools: web switch, engine picker, shortcuts (assets/compose.js) */
+.tools{display:inline-flex;gap:6px;flex-wrap:wrap}
+.tool{font-size:12.5px;color:var(--muted);border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:7px 10px;white-space:nowrap;max-width:240px;overflow:hidden;text-overflow:ellipsis}
+.tool:hover,.tool:focus-visible,.tool[aria-expanded="true"]{border-color:var(--line-gold);color:var(--text)}
+.tool.on{border-color:var(--line-gold);color:var(--text);background:rgba(227,196,107,.08)}
+.composer .box{position:relative}
+.pop{position:absolute;left:12px;right:12px;bottom:calc(100% + 8px);max-width:460px;max-height:min(60vh,440px);overflow:auto;z-index:30;background:var(--bg-2);border:1px solid var(--line-gold);border-radius:16px;padding:14px;box-shadow:var(--shadow)}
+.pop-h{font-weight:600;color:var(--text);margin:0 0 10px;display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.pop-h span{font-weight:400;font-size:12px;color:var(--dim)}
+.pop-help{font-size:12px;color:var(--muted);margin:10px 0 0;line-height:1.5}
+.pop-help a{color:var(--text);text-decoration:underline;text-underline-offset:3px}
+.pop-msg{font-size:12.5px;color:var(--warn);margin:8px 0 0;min-height:0}
+.pop-msg:empty{display:none}
+.pop-row{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
+.pick{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;color:var(--muted);padding:6px 0;cursor:pointer}
+.pick b{color:var(--text)}
+.eng-list{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 0 24px}
+.eng-list.off{opacity:.45}
+.chk{display:inline-flex;gap:6px;align-items:center;font-size:13px;color:var(--text);border:1px solid var(--line);border-radius:999px;padding:5px 10px;cursor:pointer}
+.chk:has(input:checked){border-color:var(--line-gold);background:rgba(227,196,107,.08)}
+.sc-list{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.sc-list li{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:8px 10px;border-radius:10px;cursor:pointer}
+.sc-list li.on,.sc-list li:hover{background:var(--surface-2)}
+.sc-list li b{color:var(--text);font-weight:600;font-size:13.5px}
+.sc-list li small{grid-column:1;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-list li em,.sc-list li .sc-del{grid-column:2;grid-row:1/3;align-self:center;font-style:normal;font-size:11px;color:var(--dim)}
+.sc-list li .sc-del{width:26px;height:26px;border-radius:8px;color:var(--muted)}
+.sc-list li .sc-del:hover{background:rgba(255,80,80,.12);color:#ff8a80}
+.sc-list li.empty{cursor:default;color:var(--dim);font-size:13px}
+.fld{display:grid;gap:4px;font-size:12.5px;color:var(--muted);margin-bottom:8px}
+.fld input,.fld textarea{font:inherit;font-size:14px;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 10px;resize:vertical}
+.fld input:focus,.fld textarea:focus{outline:0;border-color:var(--line-gold)}
+.att-thumb{width:44px;height:44px;border-radius:8px;object-fit:cover;flex:none;border:1px solid var(--line)}
+/* Compare: engine answers side by side (Executive) */
+.compare{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+.cmp-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+.cmp-head b{font-size:13px;letter-spacing:.06em;color:var(--text)}
+.cmp-head small{font-size:12px;color:var(--dim)}
+.cmp-grid{display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));gap:10px}
+.cmp-col{border:1px solid var(--line);border-radius:14px;background:var(--surface);display:flex;flex-direction:column;min-width:0}
+.cmp-top{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line)}
+.cmp-top b{font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cmp-top b i{font-style:normal;font-weight:400;color:var(--dim);font-size:11.5px;margin-left:6px}
+.cmp-copy{font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:4px 9px;flex:none}
+.cmp-copy:hover{border-color:var(--line-gold);color:var(--text)}
+.cmp-body{padding:10px 12px;font-size:13.5px;line-height:1.55;color:var(--muted);max-height:420px;overflow:auto}
+.cmp-body h3{font-size:14px;color:var(--text);margin:10px 0 4px}
+.cmp-body ul{margin:6px 0 6px 18px}
+.cmp-body .kpis{grid-template-columns:1fr 1fr}
+.cmp-grid.tall .cmp-body{max-height:none}
+@media(max-width:860px){.cmp-grid{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:6px}.cmp-col{flex:0 0 86%;scroll-snap-align:start}.pop{left:0;right:0;max-width:none}.tool{padding:6px 9px}}
+html[data-theme="light"] .cmp-col{background:#fbfaf6}
+html[data-theme="light"] .pop{background:#fff}
+html[data-theme="light"] .sc-list li .sc-del:hover{color:#b3261e}
 @media(max-width:860px){
   .shell{grid-template-columns:1fr}
   .rail{position:fixed;inset:0 auto 0 0;width:280px;z-index:50;background:#080808;transform:translateX(-100%);transition:transform .25s}
@@ -302,7 +356,9 @@ body{height:100vh;height:100dvh;overflow:hidden}
       <div class="box">
         <label for="prompt" class="sr-only" style="position:absolute;left:-9999px">Your brief</label>
         <div class="attach-tray" id="attach-tray" hidden aria-live="polite"></div>
-        <textarea id="prompt" rows="2" placeholder="Brief BLACK on anything, or attach a spreadsheet, calendar or bank statement…"></textarea>
+        <div class="pop" id="engine-pop" role="dialog" aria-label="Choose engines" hidden></div>
+        <div class="pop" id="sc-pop" hidden></div>
+        <textarea id="prompt" rows="2" placeholder="Brief BLACK on anything, attach an image or document, or type / for a shortcut…"></textarea>
         <div class="row">
           <div class="modes" role="group" aria-label="Mode">
             <button type="button" data-m="fast" aria-pressed="false">Fast</button>
@@ -310,10 +366,15 @@ body{height:100vh;height:100dvh;overflow:hidden}
             <button type="button" data-m="deep" aria-pressed="false">Deep</button>
             <button type="button" data-m="executive" aria-pressed="false">Executive</button>
           </div>
+          <div class="tools">
+            <button type="button" class="tool" id="web-toggle"><span>Web: Auto</span></button>
+            <button type="button" class="tool" id="engine-pick" aria-haspopup="dialog" aria-expanded="false" hidden><span>Engines: Auto</span></button>
+            <button type="button" class="tool" id="sc-btn" aria-haspopup="listbox" aria-expanded="false" title="Shortcuts: saved snippets you can add to any brief. Tip: type / in the brief box."><span>/ Shortcuts</span></button>
+          </div>
           <div class="meta">
             <span class="detect" id="detect"></span>
-            <input type="file" id="file-input" accept=".xlsx,.xlsm,.xls,.csv,.ics,text/calendar,.ofx,.qfx,.qbo,.pdf" hidden>
-            <button type="button" class="attach" id="attach-btn" aria-label="Attach a spreadsheet, calendar or bank statement" title="Attach Excel/CSV, calendar (.ics) or bank statement (.ofx, .qfx, .pdf) · max 5 MB">
+            <input type="file" id="file-input" accept=".xlsx,.xlsm,.xls,.csv,.ics,text/calendar,.ofx,.qfx,.qbo,.pdf,.jpg,.jpeg,.png,.webp,.gif,.docx,.txt,.md,image/*" hidden>
+            <button type="button" class="attach" id="attach-btn" aria-label="Attach an image, document, spreadsheet, calendar or bank statement" title="Attach an image (JPG, PNG, WebP, GIF), document (PDF, Word, text), Excel/CSV, calendar (.ics) or bank statement (.ofx, .qfx) · max 5 MB">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l9-9a3.7 3.7 0 0 1 5.2 5.2l-9 9a1.8 1.8 0 0 1-2.6-2.6l8.3-8.3"/></svg>
             </button>
             <button class="send" id="send" type="submit" aria-label="Send brief" disabled>
@@ -322,7 +383,7 @@ body{height:100vh;height:100dvh;overflow:hidden}
           </div>
         </div>
       </div>
-      <p class="hint">Enter to send · Shift+Enter for a new line</p>
+      <p class="hint">Enter to send · Shift+Enter for a new line · Type / for shortcuts</p>
     </form>
   </div>
 </div>
@@ -372,11 +433,12 @@ body{height:100vh;height:100dvh;overflow:hidden}
 <script src="config.js"></script>
 <script src="assets/viewer.js?v=2"></script>
 <script src="assets/workspace.js?v=10"></script>
-<script src="assets/statement.js?v=1"></script>
-<script src="assets/attach.js?v=3"></script>
+<script src="assets/statement.js?v=2"></script>
+<script src="assets/attach.js?v=4"></script>
+<script src="assets/compose.js?v=1"></script>
 <script src="assets/calendar.js?v=5"></script>
 <script src="assets/theme.js?v=1"></script>
 <script src="assets/credits.js?v=1"></script>
-<script src="assets/app.js?v=22"></script>
+<script src="assets/app.js?v=23"></script>
 </body>
 </html>

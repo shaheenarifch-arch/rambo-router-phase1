@@ -1,6 +1,6 @@
 /* BLACK bank statements: reads OFX / QFX / QBO, bank-style CSV or Excel exports, and text PDFs in the browser.
  * Nothing is stored. Only a compact summary (account numbers masked) goes with the brief.
- * Exposes window.BLACK_STMT = { isStatementFile, parseOfx, fromSheet, parsePdf, sheetFor, promptBlock, HELP }.
+ * Exposes window.BLACK_STMT = { isStatementFile, parseOfx, fromSheet, parsePdf, pdfText, sheetFor, promptBlock, HELP }.
  */
 (function () {
   "use strict";
@@ -137,6 +137,20 @@
     });
   }
 
+  // Plain text of any text PDF (used for general documents, not statements). Throws "scan" for image-only PDFs.
+  function pdfText(buf, maxPages) {
+    return loadPdf().then(function (lib) { return lib.getDocument({ data: buf }).promise; }).then(function (doc) {
+      var pages = Math.min(doc.numPages, maxPages || 40), jobs = [];
+      for (var i = 1; i <= pages; i++) jobs.push(doc.getPage(i).then(function (p) { return p.getTextContent(); }));
+      return Promise.all(jobs).then(function (contents) {
+        var text = contents.map(function (c) { return c.items.map(function (it) { return it.str + (it.hasEOL ? "\n" : " "); }).join(""); }).join("\n\n")
+          .replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+        if (text.replace(/\s/g, "").length < 40) throw new Error("scan");
+        return { text: text, pages: doc.numPages, read: pages };
+      });
+    });
+  }
+
   // ---------- summary ----------
   function finish(st) {
     var t = st.txns.filter(function (x) { return x.amt != null; });
@@ -185,6 +199,6 @@
 
   window.BLACK_STMT = {
     isStatementFile: function (n) { return /\.(ofx|qfx|qbo|pdf)$/i.test(n); },
-    parseOfx: parseOfx, fromSheet: fromSheet, parsePdf: parsePdf, sheetFor: sheetFor, promptBlock: promptBlock, label: label, money: money, HELP: HELP
+    parseOfx: parseOfx, fromSheet: fromSheet, parsePdf: parsePdf, pdfText: pdfText, sheetFor: sheetFor, promptBlock: promptBlock, label: label, money: money, HELP: HELP
   };
 })();

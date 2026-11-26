@@ -110,7 +110,8 @@ const PARTIAL_MIN_CHARS = 400;     // a timed-out engine that already wrote this
 const SYNTH_CANDIDATE_CHARS = 7000; // trim each candidate before synthesis so the judge answers faster
 
 export async function onRequestGet({ env }) {
-  return json({ live: engines(env).length > 0, engines: engines(env).map((e) => LABEL[e]) });
+  // ids: the engine keys the console's "Choose engines" picker sends back in POST { engines: [...] }.
+  return json({ live: engines(env).length > 0, engines: engines(env).map((e) => LABEL[e]), ids: engines(env) });
 }
 
 export async function onRequestPost({ request, env, waitUntil }) {
@@ -141,46 +142,68 @@ export async function onRequestPost({ request, env, waitUntil }) {
     try { out.credits = await charge(env, user, mode); } catch { out.credits = null; }
     return out;
   };
+  // Optional image(s) on the latest brief: [{ mediaType, data (base64) }]. Only image-capable engines answer.
+  const images = cleanImages(body.images);
+  if (images === false) return json({ error: "IMAGE_INVALID", detail: "Attach a JPG, PNG, WebP or GIF image under 5 MB." }, 400);
+  if (images.length) messages[messages.length - 1] = { ...messages[messages.length - 1], images };
+  // Web search switch from the console: "auto" (RAMBO decides), "on" (always search), "off" (never search).
+  const webPref = body.web === "on" || body.web === "off" ? body.web : "auto";
   const lastUser = messages[messages.length - 1].content;
   // The gateway's own rules win for briefs that need the live web, so a browser with an older
   // classifier (cached app.js) can't send a website or weather brief to a model without web access.
   const serverTask = classify(lastUser);
-  let taskType = serverTask === "web_lookup" || serverTask === "live_research" ? serverTask
-    : TASKS.has(body.taskType) ? body.taskType : serverTask;
-  // Docs Analyst: an attached spreadsheet or bank statement is answered from that data, Gemini first.
-  if (taskType !== "web_lookup" && taskType !== "live_research" && /\[Attached (spreadsheet|bank statement)/i.test(lastUser)) taskType = "docs_analysis";
+  const isWeb = (t) => t === "web_lookup" || t === "live_research";
+  const clientTask = TASKS.has(body.taskType) ? body.taskType : null;
+  let taskType = webPref === "off" ? (isWeb(serverTask) ? (clientTask && !isWeb(clientTask) ? clientTask : "general_chat") : clientTask || serverTask)
+    : isWeb(serverTask) ? serverTask : clientTask || serverTask;
+  // Docs Analyst: an attached spreadsheet, bank statement, document or image is answered from that data, Gemini first.
+  const attached = images.length > 0 || /\[Attached (spreadsheet|bank statement|document|image)/i.test(lastUser);
+  if (!isWeb(taskType) && attached) taskType = "docs_analysis";
+  // Web "on": briefs without their own web route go to the live-web engines (attachments keep the Docs Analyst).
+  if (webPref === "on" && !isWeb(taskType) && !attached) taskType = "live_research";
+  const web = webPref === "on" || (webPref === "auto" && taskType === "web_lookup");
   const tier = mode === "executive" ? "deep" : mode;
-  const order = (ROUTES[taskType] || ROUTES.general_chat).filter((e) => available.includes(e));
+  // Engines that can read an image; Perplexity always searches the web, so web "off" leaves it out.
+  const usable = available.filter((e) => (!images.length || VISION.includes(e)) && !(webPref === "off" && e === "perplexity"));
+  let order = (ROUTES[taskType] || ROUTES.general_chat).filter((e) => usable.includes(e));
+  // Executive "Choose engines": the user's own 2-3 engines, in their order (an explicit choice keeps Perplexity).
+  const chosen = mode === "executive" && Array.isArray(body.engines)
+    ? [...new Set(body.engines.map(String))].filter((e) => available.includes(e) && (!images.length || VISION.includes(e))).slice(0, 3) : [];
+  if (chosen.length >= 2) order = chosen;
+  if (!order.length) return json({ error: "NO_ENGINES_CONFIGURED", detail: images.length ? "No engine that reads images is available." : "No engine fits these settings." }, 503);
   // "What does Perplexity think?" -> that engine answers first.
-  const asked = askedEngine(lastUser, available);
+  const asked = chosen.length >= 2 ? null : askedEngine(lastUser, usable);
   if (asked) { const at = order.indexOf(asked); if (at >= 0) order.splice(at, 1); order.unshift(asked); }
   // A brief that names a website: open the site directly (new sites aren't in search indexes yet)
   // and answer from what is actually on the page.
-  if (taskType === "web_lookup") {
+  if (taskType === "web_lookup" && webPref !== "off") {
     const site = await fetchSite(lastUser);
     if (site) {
-      messages[messages.length - 1] = { role: "user", content: lastUser + "\n\n" + site.block };
+      messages[messages.length - 1] = { ...messages[messages.length - 1], content: lastUser + "\n\n" + site.block };
       if (site.ok && !asked && order.includes("anthropic")) { order.splice(order.indexOf("anthropic"), 1); order.unshift("anthropic"); }
     }
   }
   const requestId = crypto.randomUUID();
   const started = Date.now();
 
-  if (body.stream === true) return live({ env, waitUntil, mode, tier, order, messages, taskType, requestId, started, asked, finish });
+  // With the user's own engines, Claude still writes the synthesis when it is live (even if not picked).
+  const judgePick = chosen.length >= 2 && available.includes("anthropic") ? "anthropic" : null;
+  const extra = [chosen.length >= 2 && "USER_CHOSE_ENGINES", webPref !== "auto" && "WEB_" + webPref.toUpperCase(), images.length && "IMAGE_ATTACHED"].filter(Boolean);
+  if (body.stream === true) return live({ env, waitUntil, mode, tier, order, messages, taskType, requestId, started, asked, finish, web, extra, judgePick });
 
   try {
     if (mode === "executive" && order.length >= 2) {
-      const ex = await executive({ env, order, messages, taskType, requestId, started });
+      const ex = await executive({ env, order, messages, taskType, requestId, started, web, extra, judgePick });
       return ex.failures ? allFailed(ex.failures) : json(await finish(ex));
     }
     // Single answer with ordered fallback.
-    const reasons = [REASON[taskType], "MODE_" + mode.toUpperCase()];
+    const reasons = [REASON[taskType], "MODE_" + mode.toUpperCase(), ...extra];
     if (asked) reasons.push("USER_REQUESTED_" + asked.toUpperCase());
     if (mode === "executive") reasons.push("EXECUTIVE_NEEDS_TWO_ENGINES");
     const failures = [];
     for (let i = 0; i < order.length; i++) {
       try {
-        const r = await call(order[i], env, tier, messages, systemFor(mode), taskType === "web_lookup");
+        const r = await call(order[i], env, tier, messages, systemFor(mode), web);
         if (i > 0) reasons.push("FALLBACK_FROM_" + order[0].toUpperCase());
         return json(await finish(shape({ requestId, mode, started, provider: order[i], model: r.model, text: r.text, reasons, fallbackUsed: i > 0, usage: r.usage })));
       } catch (e) { failures.push(failure(order[i], e)); }
@@ -192,9 +215,9 @@ export async function onRequestPost({ request, env, waitUntil }) {
 }
 
 // Executive Mode: up to 3 engines in parallel, disagreements flagged, one synthesis.
-async function executive({ env, order, messages, taskType, requestId, started }) {
+async function executive({ env, order, messages, taskType, requestId, started, web, extra = [], judgePick }) {
   const panel = order.slice(0, 3);
-  const settled = await Promise.allSettled(panel.map((e) => call(e, env, "deep", messages, SYSTEM, taskType === "web_lookup")));
+  const settled = await Promise.allSettled(panel.map((e) => call(e, env, "deep", messages, SYSTEM, web)));
   const candidates = [];
   const failures = [];
   settled.forEach((s, i) => {
@@ -213,7 +236,7 @@ async function executive({ env, order, messages, taskType, requestId, started })
     candidates.map((c, i) => `--- Answer ${i + 1} (${LABEL[c.provider]}) ---\n${c.text}`).join("\n\n") +
     "\n\nWrite ONE executive synthesis: the best combined answer with a clear recommendation. " +
     "Then, on the very last line, write 'DISAGREEMENTS:' followed by a semicolon-separated list of material points where the answers disagree, or 'none'.";
-  const judge = order.includes("anthropic") ? "anthropic" : candidates[0].provider;
+  const judge = judgePick || (order.includes("anthropic") ? "anthropic" : candidates[0].provider);
   let synth;
   try { synth = await call(judge, env, "deep", [{ role: "user", content: synthPrompt }]); }
   catch { synth = null; }
@@ -224,7 +247,7 @@ async function executive({ env, order, messages, taskType, requestId, started })
   const text = m ? synth.text.slice(0, m.index).trim() : synth.text;
   return shape({
     requestId, mode: "executive", started, provider: candidates.map((c) => LABEL[c.provider]).join(" + "), model: "synthesis by " + LABEL[judge],
-    text, reasons: [REASON[taskType], "EXECUTIVE_PARALLEL_" + candidates.length], fallbackUsed: candidates.length < panel.length,
+    text, reasons: [REASON[taskType], "EXECUTIVE_PARALLEL_" + candidates.length, ...extra], fallbackUsed: candidates.length < panel.length,
     executive: { candidates: candidates.map(cand), disagreements }
   });
 }
@@ -256,7 +279,7 @@ function model(env, provider, tier) {
 async function call(provider, env, tier, messages, sys = SYSTEM, web = false) {
   const m = model(env, provider, tier);
   if (provider === "anthropic") {
-    const h = { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" }, base = { model: m, max_tokens: 4096, system: sys, messages, ...webTools(web) };
+    const h = { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" }, base = { model: m, max_tokens: 4096, system: sys, messages: forProvider("anthropic", messages), ...webTools(web) };
     const fast = claudeSpeed(m, tier);
     const j = await post("https://api.anthropic.com/v1/messages", h, { ...base, ...fast })
       .catch((e) => (Object.keys(fast).length && /^400\b/.test(String(e.message)) ? post("https://api.anthropic.com/v1/messages", h, base) : Promise.reject(e)));
@@ -264,18 +287,18 @@ async function call(provider, env, tier, messages, sys = SYSTEM, web = false) {
   }
   if (provider === "openai") {
     const j = await post("https://api.openai.com/v1/chat/completions", { authorization: "Bearer " + env.OPENAI_API_KEY },
-      { model: m, messages: [{ role: "system", content: sys }, ...messages] });
+      { model: m, messages: [{ role: "system", content: sys }, ...forProvider("openai", messages)] });
     return { model: j.model || m, text: j.choices?.[0]?.message?.content || "", usage: { inputTokens: j.usage?.prompt_tokens, outputTokens: j.usage?.completion_tokens } };
   }
   if (provider === "xai") {
     const j = await post("https://api.x.ai/v1/chat/completions", { authorization: "Bearer " + env.XAI_API_KEY },
-      { model: m, messages: [{ role: "system", content: sys }, ...messages] });
+      { model: m, messages: [{ role: "system", content: sys }, ...forProvider("xai", messages)] });
     return { model: j.model || m, text: j.choices?.[0]?.message?.content || "", usage: { inputTokens: j.usage?.prompt_tokens, outputTokens: j.usage?.completion_tokens } };
   }
   if (provider === "gemini") {
     const j = await post(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`, { "x-goog-api-key": env.GEMINI_API_KEY }, {
       systemInstruction: { parts: [{ text: sys }] },
-      contents: messages.map((x) => ({ role: x.role === "assistant" ? "model" : "user", parts: [{ text: x.content }] }))
+      contents: forProvider("gemini", messages)
     });
     const text = (j.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("");
     return { model: m, text, usage: { inputTokens: j.usageMetadata?.promptTokenCount, outputTokens: j.usageMetadata?.candidatesTokenCount } };
@@ -334,7 +357,7 @@ async function post(url, headers, payload) {
 //   ping   {t}                           (keep-alive every 8s)
 //   done   <same body as the JSON response>
 //   error  {error, engines?}
-function live({ env, waitUntil, mode, tier, order, messages, taskType, requestId, started, asked, finish }) {
+function live({ env, waitUntil, mode, tier, order, messages, taskType, requestId, started, asked, finish, web, extra, judgePick }) {
   const { readable, writable } = new TransformStream();
   const w = writable.getWriter();
   const enc = new TextEncoder();
@@ -350,7 +373,7 @@ function live({ env, waitUntil, mode, tier, order, messages, taskType, requestId
   const job = (async () => {
     try {
       const executive = mode === "executive" && order.length >= 2;
-      await (executive ? liveExecutive : liveSingle)({ env, send, mode, tier, order, messages, taskType, requestId, started, asked });
+      await (executive ? liveExecutive : liveSingle)({ env, send, mode, tier, order, messages, taskType, requestId, started, asked, web, extra, judgePick });
     } catch (e) {
       await send("error", { error: "INTERNAL_ERROR", detail: String((e && e.message) || e).slice(0, 160) });
     } finally {
@@ -412,8 +435,8 @@ async function runEngine({ env, send, provider, tier, messages, target, timeoutM
   return { ok: false, provider, failure: err };
 }
 
-async function liveSingle({ env, send, mode, tier, order, messages, taskType, requestId, started, asked }) {
-  const reasons = [REASON[taskType], "MODE_" + mode.toUpperCase()];
+async function liveSingle({ env, send, mode, tier, order, messages, taskType, requestId, started, asked, web, extra = [] }) {
+  const reasons = [REASON[taskType], "MODE_" + mode.toUpperCase(), ...extra];
   if (asked) reasons.push("USER_REQUESTED_" + asked.toUpperCase());
   if (mode === "executive") reasons.push("EXECUTIVE_NEEDS_TWO_ENGINES");
   await send("route", { mode, taskType, reasons, engines: order.map((e) => engineInfo(env, e, tier)), judge: null });
@@ -423,7 +446,7 @@ async function liveSingle({ env, send, mode, tier, order, messages, taskType, re
   // An engine that fails outright still falls back to the next standby, as before.
   const failures = [];
   const running = new Map(); // provider -> AbortController
-  const system = systemFor(mode), web = taskType === "web_lookup";
+  const system = systemFor(mode);
   let winner = null, next = 0, hedged = false, settled = false, hedgeTimer = null, settle;
   const finished = new Promise((res) => (settle = res));
   const finish = (r) => { if (settled) return; settled = true; clearTimeout(hedgeTimer); settle(r); };
@@ -476,22 +499,22 @@ async function liveSingle({ env, send, mode, tier, order, messages, taskType, re
   return send("done", shape({ requestId, mode, started, provider: r.provider, model: r.model, text: r.text, reasons, fallbackUsed, usage: r.usage }));
 }
 
-async function liveExecutive({ env, send, order, messages, taskType, requestId, started }) {
+async function liveExecutive({ env, send, order, messages, taskType, requestId, started, web, extra = [], judgePick }) {
   const panel = order.slice(0, 3);
-  const judge = order.includes("anthropic") ? "anthropic" : panel[0];
+  const judge = judgePick || (order.includes("anthropic") ? "anthropic" : panel[0]);
   const synthTier = env.SYNTH_TIER === "deep" ? "deep" : "synth";
   await send("route", {
-    mode: "executive", taskType, reasons: [REASON[taskType], "EXECUTIVE_PARALLEL_" + panel.length],
+    mode: "executive", taskType, reasons: [REASON[taskType], "EXECUTIVE_PARALLEL_" + panel.length, ...extra],
     engines: panel.map((e) => engineInfo(env, e, "deep")), judge: engineInfo(env, judge, synthTier)
   });
 
-  const results = await Promise.all(panel.map((p) => runEngine({ env, send, provider: p, tier: "deep", messages, timeoutMs: ENGINE_TIMEOUT_MS, web: taskType === "web_lookup" })));
+  const results = await Promise.all(panel.map((p) => runEngine({ env, send, provider: p, tier: "deep", messages, timeoutMs: ENGINE_TIMEOUT_MS, web })));
   const good = results.filter((r) => r.ok);
   const failures = results.filter((r) => !r.ok).map((r) => r.failure);
   if (!good.length) return send("error", { error: "ALL_ENGINES_FAILED", engines: failures });
 
   const candidates = good.map((r) => ({ model: LABEL[r.provider] + " · " + r.model + (r.partial ? " (partial)" : ""), text: r.text }));
-  const reasons = [REASON[taskType], "EXECUTIVE_PARALLEL_" + good.length];
+  const reasons = [REASON[taskType], "EXECUTIVE_PARALLEL_" + good.length, ...extra];
   if (good.length === 1) {
     await send("synth", { status: "skipped", label: LABEL[good[0].provider], model: good[0].model });
     return send("done", shape({ requestId, mode: "executive", started, provider: good[0].provider, model: good[0].model, text: good[0].text,
@@ -552,7 +575,7 @@ async function stream(provider, env, tier, messages, { onDelta, timeoutMs, syste
     if (provider === "anthropic") {
       url = "https://api.anthropic.com/v1/messages";
       headers = { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" };
-      payload = { model: m, max_tokens: 4096, system: sys, messages, stream: true, ...claudeSpeed(m, tier), ...webTools(web) };
+      payload = { model: m, max_tokens: 4096, system: sys, messages: forProvider("anthropic", messages), stream: true, ...claudeSpeed(m, tier), ...webTools(web) };
       onData = (j) => {
         if (j.type === "message_start" && j.message) { out.model = j.message.model || m; out.usage.inputTokens = j.message.usage && j.message.usage.input_tokens; }
         else if (j.type === "content_block_delta" && j.delta && j.delta.type === "text_delta") add(j.delta.text);
@@ -562,7 +585,7 @@ async function stream(provider, env, tier, messages, { onDelta, timeoutMs, syste
     } else if (provider === "openai" || provider === "xai") {
       url = provider === "openai" ? "https://api.openai.com/v1/chat/completions" : "https://api.x.ai/v1/chat/completions";
       headers = { authorization: "Bearer " + (provider === "openai" ? env.OPENAI_API_KEY : env.XAI_API_KEY) };
-      payload = { model: m, messages: [{ role: "system", content: sys }, ...messages], stream: true };
+      payload = { model: m, messages: [{ role: "system", content: sys }, ...forProvider(provider, messages)], stream: true };
       if (provider === "openai") payload.stream_options = { include_usage: true };
       onData = (j) => {
         if (j.model) out.model = j.model;
@@ -575,7 +598,7 @@ async function stream(provider, env, tier, messages, { onDelta, timeoutMs, syste
       headers = { "x-goog-api-key": env.GEMINI_API_KEY };
       payload = {
         systemInstruction: { parts: [{ text: sys }] },
-        contents: messages.map((x) => ({ role: x.role === "assistant" ? "model" : "user", parts: [{ text: x.content }] }))
+        contents: forProvider("gemini", messages)
       };
       onData = (j) => {
         ((j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || []).forEach((p) => add(p.text || ""));
@@ -634,6 +657,37 @@ async function readSse(body, onData) {
       onData(j);
     }
   }
+}
+
+// ---------- images ----------
+// Engines that read images. Grok and Perplexity are left out of image briefs.
+const VISION = ["anthropic", "openai", "gemini"];
+const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const MAX_IMAGE_B64 = 7000000; // ~5 MB of image data in total
+// [] when there are no images, false when what was sent isn't a usable image.
+function cleanImages(list) {
+  if (list == null) return [];
+  if (!Array.isArray(list) || list.length > 3) return false;
+  let total = 0;
+  for (const i of list) {
+    if (!i || !IMAGE_TYPES.includes(i.mediaType) || typeof i.data !== "string" || !/^[A-Za-z0-9+/=]+$/.test(i.data)) return false;
+    total += i.data.length;
+  }
+  return total > MAX_IMAGE_B64 ? false : list.map((i) => ({ mediaType: i.mediaType, data: i.data }));
+}
+// Each provider's message format; a message with images becomes text + image parts.
+function forProvider(provider, messages) {
+  return messages.map((x) => {
+    const imgs = x.images || [];
+    if (provider === "gemini") {
+      return { role: x.role === "assistant" ? "model" : "user", parts: [...imgs.map((i) => ({ inline_data: { mime_type: i.mediaType, data: i.data } })), { text: x.content }] };
+    }
+    if (!imgs.length) return { role: x.role, content: x.content };
+    if (provider === "anthropic") {
+      return { role: x.role, content: [...imgs.map((i) => ({ type: "image", source: { type: "base64", media_type: i.mediaType, data: i.data } })), { type: "text", text: x.content }] };
+    }
+    return { role: x.role, content: [{ type: "text", text: x.content }, ...imgs.map((i) => ({ type: "image_url", image_url: { url: "data:" + i.mediaType + ";base64," + i.data } }))] };
+  });
 }
 
 // ---------- helpers ----------

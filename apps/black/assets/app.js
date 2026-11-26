@@ -116,6 +116,7 @@
   function setMode(m) {
     mode = m;
     document.querySelectorAll(".modes button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.m === m)); });
+    if (window.BLACK_COMPOSE) window.BLACK_COMPOSE.onMode(m);
   }
   function onInput() {
     var v = el.prompt.value;
@@ -130,7 +131,8 @@
 
   // ---------- briefs ----------
   function load() { try { return JSON.parse(localStorage.getItem(STORE) || "[]"); } catch (e) { return []; } }
-  function save() { try { localStorage.setItem(STORE, JSON.stringify(briefs.slice(0, 30))); } catch (e) {} }
+  // Keys starting with "_" (an attached image's data) stay in memory only, so history stays small.
+  function save() { try { localStorage.setItem(STORE, JSON.stringify(briefs.slice(0, 30), function (k, v) { return k.charAt(0) === "_" ? undefined : v; })); } catch (e) {} }
   function newBrief() {
     current = null; el.thread.innerHTML = ""; el.welcome.style.display = ""; el.prompt.value = ""; onInput(); renderHistory(); el.prompt.focus();
     if (window.BLACK_WORKSPACE) window.BLACK_WORKSPACE.resume();
@@ -165,6 +167,8 @@
     }
     if (!text) text = att && att.kind === "statement" ? "Summarize this bank statement: money in and out, biggest spending, fees, unusual charges and anything I should act on."
       : att && att.kind === "calendar" ? "Summarize my calendar: upcoming meetings, busy days, conflicts and anything I need to prepare for."
+      : att && att.kind === "image" ? "Look at this image and tell me what matters: what it shows, any text or numbers in it, and anything I should act on."
+      : att && att.kind === "document" ? "Summarize this document: the key points, numbers, decisions and anything I should act on."
       : "Analyze this spreadsheet: the key totals, trends and anything that needs my attention.";
     var cal = !att && window.BLACK_CAL;
     var scheduling = cal && window.BLACK_CAL.isScheduling(text);
@@ -177,6 +181,7 @@
     }
     current.mode = mode;
     var msg = att ? { role: "user", content: text + "\n\n" + window.BLACK_ATTACH.promptBlock(), display: text, file: att } : { role: "user", content: text };
+    if (att && att.kind === "image" && window.BLACK_ATTACH.image) msg._image = window.BLACK_ATTACH.image();
     current.messages.push(msg);
     save(); renderHistory();
     el.welcome.style.display = "none";
@@ -239,14 +244,21 @@
   }
 
   function callRambo(taskType, card) {
+    var CP = window.BLACK_COMPOSE;
+    var last = current.messages[current.messages.length - 1];
     var body = {
       applicationId: CFG.applicationId || "black",
       mode: mode,
       taskType: taskType,
       stream: true,
       messages: outgoing(current.messages),
-      output: { format: "markdown" }
+      output: { format: "markdown" },
+      web: CP ? CP.web() : "auto"
     };
+    var picked = CP && CP.engines();
+    if (picked) body.engines = picked;
+    // An attached image goes with the brief it was attached to (and its Retry), not with later briefs.
+    if (last && last._image) body.images = [last._image];
     return fetch(API + "/v1/responses", {
       method: "POST",
       credentials: "include",
@@ -316,7 +328,8 @@
     var last = -1;
     msgs.forEach(function (m, i) { if (m.file) last = i; });
     return msgs.map(function (m, i) {
-      if (m.file && i !== last) return { role: m.role, content: (m.display || "") + "\n\n[Earlier attachment: " + m.file.name + "]" };
+      // An image only travels with its own brief, so later briefs just mention it.
+      if (m.file && (i !== last || (m.file.kind === "image" && i !== msgs.length - 1))) return { role: m.role, content: (m.display || "") + "\n\n[Earlier attachment: " + m.file.name + "]" };
       return { role: m.role, content: m.content };
     });
   }
@@ -325,10 +338,11 @@
     if (status === 402) { if (CR()) { CR().set({ balance: j && j.balance != null ? j.balance : 0 }); CR().open(); } return "You're out of BLACK credits for this mode. Choose a plan to keep going (Fast and Smart use 1 credit)."; }
     if (status === 403) return "Your account doesn't have access to BLACK.";
     if (status === 413) return "That brief is too long. Shorten it or start a new brief.";
+    if (status === 400 && j && j.error === "IMAGE_INVALID") return j.detail || "That image couldn't be used. Try a JPG or PNG under 5 MB.";
     if (status === 502) return "Every engine failed to answer this time. Try again in a moment.";
     if (status === 424) return "Every engine failed to answer. " + ((j && j.engines) || []).map(function (f) { return f.engine + ": " + f.error; }).join(" · ");
     if (status === 429) return "You're sending briefs quickly. Wait a moment and try again.";
-    if (status === 503) return "No intelligence engine is available right now. Try again shortly.";
+    if (status === 503) return j && j.detail && j.error === "NO_ENGINES_CONFIGURED" ? j.detail : "No intelligence engine is available right now. Try again shortly.";
     return "The gateway returned " + status + (j && j.error ? " (" + j.error + ")" : "") + ".";
   }
 
@@ -362,6 +376,8 @@
       var f = document.createElement("div"); f.className = "bubble-file";
       f.textContent = file.kind === "statement" ? "\ud83c\udfe6 " + file.name + " · bank statement · " + Number(file.rows).toLocaleString() + " transactions"
         : file.kind === "calendar" ? "\ud83d\uddd3 " + file.name + " · calendar · " + Number(file.rows).toLocaleString() + " events"
+        : file.kind === "image" ? "\ud83d\uddbc " + file.name + " · image"
+        : file.kind === "document" ? "\ud83d\udcc4 " + file.name + " · document · " + Number(file.words || 0).toLocaleString() + " words"
         : "▦ " + file.name + " · " + file.sheets + " sheet" + (file.sheets > 1 ? "s" : "") + " · " + Number(file.rows).toLocaleString() + " rows";
       b.insertBefore(f, b.firstChild);
     }
@@ -503,18 +519,17 @@
     if (meta.disagreements && meta.disagreements.length) {
       meta.disagreements.forEach(function (x) { chip(trail, "Disagreement", x, true); });
     }
-    if (meta.candidates && meta.candidates.length) {
+    var single = meta.candidates && meta.candidates.length === 1 ? meta.candidates[0] : null;
+    if (single) {
       var det = document.createElement("details"); det.className = "cands";
-      det.innerHTML = "<summary>View " + meta.candidates.length + " candidate answers</summary>";
-      meta.candidates.forEach(function (c, i) {
-        var cd = document.createElement("div"); cd.className = "c";
-        cd.innerHTML = "<strong></strong>" + md(c.text || "");
-        cd.querySelector("strong").textContent = "Candidate " + (i + 1) + (c.model ? " · " + c.model : "");
-        det.appendChild(cd);
-      });
-      a.appendChild(det);
+      det.innerHTML = "<summary>View the engine's own answer</summary>";
+      var cd = document.createElement("div"); cd.className = "c";
+      cd.innerHTML = "<strong></strong>" + md(single.text || "");
+      cd.querySelector("strong").textContent = single.model || "Engine";
+      det.appendChild(cd); a.appendChild(det);
     }
     collapse(a);
+    if (meta.candidates && meta.candidates.length > 1) a.appendChild(compareView(meta.candidates));
     tapCards(a);
     if (!meta.preview && (meta.mode === "fast" || meta.mode === "smart")) {
       var fr = document.createElement("button"); fr.type = "button"; fr.className = "btn btn-ghost btn-sm full-report"; fr.textContent = "Full report →";
@@ -529,6 +544,34 @@
     }
     d.appendChild(a); el.thread.appendChild(d);
     return d;
+  }
+  // Compare: each engine's own answer in its own column (swipe on a phone), with Copy. Shown under the synthesis.
+  function compareView(cands) {
+    var c = document.createElement("section"); c.className = "compare";
+    c.innerHTML = '<div class="cmp-head"><span><b>COMPARE</b> <small>' + cands.length + " engines answered on their own · BLACK synthesis above</small></span>" +
+      '<button type="button" class="cmp-copy cmp-tall">Expand all</button></div><div class="cmp-grid" style="--n:' + cands.length + '"></div>';
+    var grid = c.querySelector(".cmp-grid");
+    cands.forEach(function (x) {
+      var parts = String(x.model || "Engine").split(" · "), col = document.createElement("article"); col.className = "cmp-col";
+      col.innerHTML = '<div class="cmp-top"><b></b><button type="button" class="cmp-copy" title="Copy this answer">Copy</button></div><div class="cmp-body">' + md(x.text || "") + "</div>";
+      var b = col.querySelector(".cmp-top b"); b.textContent = parts[0];
+      if (parts.length > 1) { var i = document.createElement("i"); i.textContent = parts.slice(1).join(" · "); b.appendChild(i); }
+      col.querySelector(".cmp-copy").addEventListener("click", function (e) { copy(x.text || "", e.currentTarget); });
+      grid.appendChild(col);
+    });
+    c.querySelector(".cmp-tall").addEventListener("click", function (e) {
+      var on = grid.classList.toggle("tall"); e.currentTarget.textContent = on ? "Collapse" : "Expand all";
+    });
+    return c;
+  }
+  function copy(text, btn) {
+    var done = function () { var t = btn.textContent; btn.textContent = "Copied"; setTimeout(function () { btn.textContent = t; }, 1400); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text); done(); });
+    else { fallbackCopy(text); done(); }
+  }
+  function fallbackCopy(text) {
+    var t = document.createElement("textarea"); t.value = text; t.style.position = "fixed"; t.style.opacity = "0";
+    document.body.appendChild(t); t.select(); try { document.execCommand("copy"); } catch (e) {} t.remove();
   }
   // Data cards and charts in an answer open in the bigger viewer (Back / Next through that answer's cards).
   function tapCards(a) {
